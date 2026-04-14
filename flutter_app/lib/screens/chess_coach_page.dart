@@ -6,8 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:flutter_app/models/puzzle_data.dart';
 import 'package:flutter_app/screens/puzzle_detail_page.dart';
-import 'package:flutter_app/widgets/puzzle_list_item.dart';
-import 'package:flutter_app/widgets/slider_field.dart';
+import 'package:flutter_app/screens/settings_page.dart';
 
 class ChessCoachPage extends StatefulWidget {
   const ChessCoachPage({super.key});
@@ -39,8 +38,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
 
   String _defaultBackendUrl() {
     final host = Uri.base.host.toLowerCase();
-    final isLocalHost =
-        host.isEmpty || host == 'localhost' || host == '127.0.0.1';
+    final isLocalHost = host.isEmpty || host == 'localhost' || host == '127.0.0.1';
     return isLocalHost ? 'http://127.0.0.1:8000' : Uri.base.origin;
   }
 
@@ -51,14 +49,44 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     super.dispose();
   }
 
+  TrainingSettings _currentSettings() {
+    return TrainingSettings(
+      backendUrl: _backendUrlController.text.trim(),
+      username: _usernameController.text.trim(),
+      maxGames: _maxGames,
+      maxPuzzles: _maxPuzzles,
+      analysisDepth: _analysisDepth,
+    );
+  }
+
+  Future<void> _openSettings(BuildContext context) async {
+    final settings = await Navigator.of(context).push<TrainingSettings>(
+      MaterialPageRoute<TrainingSettings>(
+        builder: (_) => SettingsPage(initialSettings: _currentSettings()),
+      ),
+    );
+
+    if (settings == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _backendUrlController.text = settings.backendUrl;
+      _usernameController.text = settings.username;
+      _maxGames = settings.maxGames;
+      _maxPuzzles = settings.maxPuzzles;
+      _analysisDepth = settings.analysisDepth;
+      _errorMessage = null;
+    });
+  }
+
   Future<void> _generatePuzzles() async {
-    final baseUrl =
-        _backendUrlController.text.trim().replaceAll(RegExp(r'/$'), '');
+    final baseUrl = _backendUrlController.text.trim().replaceAll(RegExp(r'/$'), '');
     final username = _usernameController.text.trim();
 
     if (baseUrl.isEmpty || username.isEmpty) {
       setState(() {
-        _errorMessage = 'Enter both a backend URL and a Chess.com username.';
+        _errorMessage = 'Open settings and enter both a backend URL and a Chess.com username.';
       });
       return;
     }
@@ -83,18 +111,13 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
           .timeout(const Duration(seconds: 45));
 
       final dynamic decoded = jsonDecode(response.body);
-      final Map<String, dynamic> payload =
-          decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+      final Map<String, dynamic> payload = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
 
       if (response.statusCode != 200) {
-        throw Exception(payload['error'] ??
-            'Request failed with status ${response.statusCode}.');
+        throw Exception(payload['error'] ?? 'Request failed with status ${response.statusCode}.');
       }
 
-      final puzzleList = (payload['puzzles'] as List<dynamic>? ?? <dynamic>[])
-          .map((item) =>
-              PuzzleData.fromJson(Map<String, dynamic>.from(item as Map)))
-          .toList();
+      final puzzleList = (payload['puzzles'] as List<dynamic>? ?? <dynamic>[]).map((item) => PuzzleData.fromJson(Map<String, dynamic>.from(item as Map))).toList();
 
       if (!mounted) {
         return;
@@ -102,19 +125,24 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
 
       setState(() {
         _puzzles = puzzleList;
-        _stats = Map<String, dynamic>.from(
-            payload['stats'] as Map? ?? <String, dynamic>{});
+        _stats = Map<String, dynamic>.from(payload['stats'] as Map? ?? <String, dynamic>{});
         _gamesCount = payload['games_count'] as int? ?? 0;
         _puzzleResults.clear();
+        if (puzzleList.isEmpty) {
+          _errorMessage = 'No puzzles were found in those recent games. Try a different username or broader search.';
+        }
       });
+
+      if (puzzleList.isNotEmpty) {
+        _openPuzzle(context, 0);
+      }
     } on TimeoutException {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _errorMessage =
-            'Puzzle generation took too long. Try fewer games or a lower analysis depth.';
+        _errorMessage = 'Puzzle generation took too long. Try fewer games or a lower analysis depth.';
       });
     } catch (error) {
       if (!mounted) {
@@ -142,8 +170,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     });
   }
 
-  MaterialPageRoute<void> _buildPuzzleRoute(
-      BuildContext context, int puzzleIndex) {
+  MaterialPageRoute<void> _buildPuzzleRoute(BuildContext context, int puzzleIndex) {
     return MaterialPageRoute<void>(
       builder: (_) => PuzzleDetailPage(
         index: puzzleIndex + 1,
@@ -155,6 +182,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
                   _buildPuzzleRoute(context, puzzleIndex + 1),
                 )
             : null,
+        onOpenSettings: () => _openSettings(context),
         gamesCount: _gamesCount,
         puzzleCount: _puzzles.length,
         attemptCount: _puzzleResults.length,
@@ -168,105 +196,45 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     Navigator.of(context).push(_buildPuzzleRoute(context, puzzleIndex));
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('♟ Chess Coach'),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 820),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildControlPanel(context),
-                const SizedBox(height: 16),
-                _buildResultsPanel(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _buildStatusCard(BuildContext context) {
+    final username = _usernameController.text.trim();
 
-  Widget _buildControlPanel(BuildContext context) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Generate puzzles from your games',
-                style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Ready to train',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
             const Text(
-                'Run the Python backend locally, then enter your Chess.com username here.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _backendUrlController,
-              decoration: const InputDecoration(
-                labelText: 'Backend URL',
-                hintText: 'http://127.0.0.1:8000',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: 'Chess.com username',
-                border: OutlineInputBorder(),
-              ),
+              'Generate a fresh set of puzzles from your recent Chess.com games and jump straight into the first challenge.',
             ),
             const SizedBox(height: 16),
-            SliderField(
-              label: 'Recent games to scan',
-              value: _maxGames,
-              min: 5,
-              max: 50,
-              divisions: 9,
-              onChanged: (value) => setState(() => _maxGames = value),
-            ),
-            SliderField(
-              label: 'Max puzzle candidates',
-              value: _maxPuzzles,
-              min: 1,
-              max: 12,
-              divisions: 11,
-              onChanged: (value) => setState(() => _maxPuzzles = value),
-            ),
-            SliderField(
-              label: 'Analysis depth',
-              value: _analysisDepth,
-              min: 8,
-              max: 16,
-              divisions: 8,
-              onChanged: (value) => setState(() => _analysisDepth = value),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _isLoading ? null : _generatePuzzles,
-                icon: _isLoading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.bolt),
-                label: Text(_isLoading ? 'Analyzing...' : 'Create puzzles'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _isLoading
-                  ? 'Analyzing recent games. This can take around 10–30 seconds.'
-                  : 'Tip: on an Android emulator, use http://10.0.2.2:8000 as the backend URL.',
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                Chip(
+                  avatar: const Icon(Icons.person, size: 18),
+                  label: Text(username.isEmpty ? 'No username set' : username),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.history, size: 18),
+                  label: Text('${_maxGames.round()} games'),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.extension, size: 18),
+                  label: Text('${_maxPuzzles.round()} puzzles'),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.analytics, size: 18),
+                  label: Text('Depth ${_analysisDepth.round()}'),
+                ),
+              ],
             ),
           ],
         ),
@@ -274,57 +242,134 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     );
   }
 
-  Widget _buildResultsPanel() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Puzzle library',
-          style: Theme.of(context)
-              .textTheme
-              .titleLarge
-              ?.copyWith(fontWeight: FontWeight.w700),
+  Widget _buildFeedbackCard(BuildContext context) {
+    if (_errorMessage != null) {
+      return Card(
+        color: Colors.red.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            _errorMessage!,
+            style: TextStyle(color: Colors.red.shade900),
+          ),
         ),
-        const SizedBox(height: 6),
-        const Text('Choose a puzzle from the list below.'),
-        const SizedBox(height: 12),
-        if (_errorMessage != null)
-          Card(
-            color: Colors.red.shade50,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(_errorMessage!,
-                  style: TextStyle(color: Colors.red.shade900)),
-            ),
-          )
-        else if (_isLoading)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
-            ),
-          )
-        else if (_puzzles.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                  'No puzzles yet. Generate some from your Chess.com games.'),
-            ),
-          )
-        else
-          ..._puzzles.asMap().entries.map(
-                (entry) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: PuzzleListItem(
-                    index: entry.key + 1,
-                    puzzle: entry.value,
-                    result: _puzzleResults[entry.key],
-                    onTap: () => _openPuzzle(context, entry.key),
-                  ),
+      );
+    }
+
+    if (_isLoading) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.4),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Analyzing recent games and preparing your first puzzle...',
                 ),
               ),
-      ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_puzzles.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'No puzzle set loaded yet. Use Create puzzles to begin.',
+          ),
+        ),
+      );
+    }
+
+    final solved = _puzzleResults.values.where((value) => value).length;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Latest session',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Loaded ${_puzzles.length} puzzle${_puzzles.length == 1 ? '' : 's'} from $_gamesCount game${_gamesCount == 1 ? '' : 's'}.',
+            ),
+            const SizedBox(height: 4),
+            Text('Solved: $solved/${_puzzleResults.length} attempts'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('♟ Chess Coach'),
+        actions: [
+          IconButton(
+            onPressed: () => _openSettings(context),
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildStatusCard(context),
+                const SizedBox(height: 16),
+                _buildFeedbackCard(context),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _isLoading ? null : _generatePuzzles,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.bolt),
+                  label: Text(
+                    _isLoading ? 'Analyzing...' : 'Create puzzles',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _isLoading ? 'This can take around 10–30 seconds.' : 'Use the gear icon anytime to adjust your settings.',
+                  textAlign: TextAlign.center,
+                ),
+                if (_puzzles.isNotEmpty && !_isLoading) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => _openPuzzle(context, 0),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Resume latest set'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

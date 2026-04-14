@@ -13,6 +13,7 @@ class PuzzleDetailPage extends StatefulWidget {
     required this.onAttempt,
     this.initialResult,
     this.onNextPuzzle,
+    this.onOpenSettings,
     this.gamesCount = 0,
     this.puzzleCount = 0,
     this.attemptCount = 0,
@@ -25,6 +26,7 @@ class PuzzleDetailPage extends StatefulWidget {
   final ValueChanged<bool> onAttempt;
   final bool? initialResult;
   final VoidCallback? onNextPuzzle;
+  final VoidCallback? onOpenSettings;
   final int gamesCount;
   final int puzzleCount;
   final int attemptCount;
@@ -151,12 +153,9 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _SnapshotPill(
-                      label: 'Score',
-                      value: '${widget.correctCount}/${widget.attemptCount}'),
+                  _SnapshotPill(label: 'Score', value: '${widget.correctCount}/${widget.attemptCount}'),
                   const SizedBox(width: 8),
-                  _SnapshotPill(
-                      label: 'Loaded', value: '${widget.puzzleCount}'),
+                  _SnapshotPill(label: 'Loaded', value: '${widget.puzzleCount}'),
                   const SizedBox(width: 8),
                   _SnapshotPill(label: 'Games', value: '${widget.gamesCount}'),
                   const SizedBox(width: 8),
@@ -309,6 +308,14 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
       appBar: AppBar(
         title: Text('Puzzle ${widget.index}'),
         toolbarHeight: 60,
+        actions: [
+          if (widget.onOpenSettings != null)
+            IconButton(
+              onPressed: widget.onOpenSettings,
+              icon: const Icon(Icons.settings),
+              tooltip: 'Settings',
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(78),
           child: _buildHeaderSnapshot(context),
@@ -316,9 +323,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final boardSize = constraints.maxWidth < 640
-              ? (constraints.maxWidth - 84).clamp(260.0, 560.0).toDouble()
-              : 520.0;
+          final boardSize = constraints.maxWidth < 640 ? (constraints.maxWidth - 84).clamp(260.0, 560.0).toDouble() : 520.0;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -330,14 +335,10 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
                   children: [
                     Text(
                       puzzle.title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                        'Drag a piece to solve the puzzle. Tapping also works.'),
+                    const Text('Drag a piece to solve the puzzle. Tapping also works.'),
                     const SizedBox(height: 16),
                     Center(
                       child: SizedBox(
@@ -393,8 +394,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
                       children: [
                         OutlinedButton(
                           onPressed: () => setState(() => _reveal = !_reveal),
-                          child: Text(
-                              _reveal ? 'Hide solution' : 'Reveal solution'),
+                          child: Text(_reveal ? 'Hide solution' : 'Reveal solution'),
                         ),
                         TextButton(
                           onPressed: () => setState(_resetPuzzle),
@@ -405,11 +405,8 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
                     if (_reveal || _lastResult == true) ...[
                       const SizedBox(height: 8),
                       Text('Best move: ${puzzle.bestMoveSan}'),
-                      if (puzzle.actualMoveSan != null)
-                        Text(
-                            'Move played in the game: ${puzzle.actualMoveSan}'),
-                      if (puzzle.sourceUrl.isNotEmpty)
-                        SelectableText('Source game: ${puzzle.sourceUrl}'),
+                      if (puzzle.actualMoveSan != null) Text('Move played in the game: ${puzzle.actualMoveSan}'),
+                      if (puzzle.sourceUrl.isNotEmpty) SelectableText('Source game: ${puzzle.sourceUrl}'),
                     ],
                   ],
                 ),
@@ -472,14 +469,10 @@ class _EvalBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final whiteShare = mateIn != null
-        ? (evaluationCp >= 0 ? 0.96 : 0.04)
-        : (((evaluationCp.clamp(-900, 900)) + 900) / 1800).toDouble();
+    final whiteShare = mateIn != null ? (evaluationCp >= 0 ? 0.96 : 0.04) : (((evaluationCp.clamp(-900, 900)) + 900) / 1800).toDouble();
     final whiteFlex = (whiteShare * 100).round().clamp(4, 96);
     final blackFlex = 100 - whiteFlex;
-    final label = mateIn != null
-        ? 'M$mateIn'
-        : '${evaluationCp >= 0 ? '+' : ''}${(evaluationCp / 100).toStringAsFixed(1)}';
+    final label = mateIn != null ? 'M$mateIn' : '${evaluationCp >= 0 ? '+' : ''}${(evaluationCp / 100).toStringAsFixed(1)}';
 
     return SizedBox(
       width: 56,

@@ -6,13 +6,13 @@ import 'package:flutter_app/models/puzzle_data.dart';
 import 'package:flutter_app/screens/puzzle_detail_page.dart';
 
 void main() {
-  testWidgets('Chess Coach home screen renders puzzle list UI',
+  testWidgets('Chess Coach home screen renders quick start UI',
       (WidgetTester tester) async {
     await tester.pumpWidget(const ChessCoachApp());
 
     expect(find.text('Create puzzles'), findsOneWidget);
-    expect(find.text('Chess.com username'), findsOneWidget);
-    expect(find.textContaining('Puzzle library'), findsOneWidget);
+    expect(find.byIcon(Icons.settings), findsOneWidget);
+    expect(find.textContaining('Ready to train'), findsOneWidget);
   });
 
   testWidgets('Puzzle detail screen supports drag solving',
