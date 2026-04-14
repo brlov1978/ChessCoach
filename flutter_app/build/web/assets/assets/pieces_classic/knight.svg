@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <g fill="currentColor">
+    <path d="M29 78h46c-2-6-4-10-4-14 0-8 0-15-4-22-4-8-11-14-22-21 8-1 14-4 18-9-11-2-22 1-30 10-7 8-9 18-5 31l-7 25z"/>
+    <rect x="19" y="80" width="63" height="8" rx="2.5"/>
+  </g>
+  <circle cx="55" cy="27" r="2.6" fill="rgba(255,255,255,0.26)"/>
+</svg>

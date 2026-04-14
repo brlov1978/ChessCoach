@@ -20,12 +20,12 @@ class ChessBoardView extends StatelessWidget {
   final String? highlightSquare;
 
   static const Map<String, String> _pieceAssets = {
-    'k': 'assets/pieces/king.svg',
-    'q': 'assets/pieces/queen.svg',
-    'r': 'assets/pieces/rook.svg',
-    'b': 'assets/pieces/bishop.svg',
-    'n': 'assets/pieces/knight.svg',
-    'p': 'assets/pieces/pawn.svg',
+    'k': 'assets/pieces_classic/king.svg',
+    'q': 'assets/pieces_classic/queen.svg',
+    'r': 'assets/pieces_classic/rook.svg',
+    'b': 'assets/pieces_classic/bishop.svg',
+    'n': 'assets/pieces_classic/knight.svg',
+    'p': 'assets/pieces_classic/pawn.svg',
   };
 
   Widget _buildPieceWidget(String piece, {double size = 34}) {
@@ -45,21 +45,37 @@ class ChessBoardView extends StatelessWidget {
       _ => 0.94,
     };
 
+    final pieceAsset = _pieceAssets[normalizedPiece]!;
+    final frontColor =
+        isWhite ? const Color(0xFFFDFBF6) : const Color(0xFF1F1F1F);
+    final outlineColor =
+        isWhite ? const Color(0xFF3A342E) : const Color(0xFFE8E2D8);
+    final pieceSize = size * sizeFactor;
+
     return SizedBox(
       width: size,
       height: size,
       child: Center(
         child: Transform.translate(
           offset: Offset(0, size * 0.04),
-          child: SvgPicture.asset(
-            _pieceAssets[normalizedPiece]!,
-            width: size * sizeFactor,
-            height: size * sizeFactor,
-            fit: BoxFit.contain,
-            colorFilter: ColorFilter.mode(
-              isWhite ? const Color(0xFFF8F8F6) : const Color(0xFF202020),
-              BlendMode.srcIn,
-            ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SvgPicture.asset(
+                pieceAsset,
+                width: pieceSize * 1.08,
+                height: pieceSize * 1.08,
+                fit: BoxFit.contain,
+                colorFilter: ColorFilter.mode(outlineColor, BlendMode.srcIn),
+              ),
+              SvgPicture.asset(
+                pieceAsset,
+                width: pieceSize,
+                height: pieceSize,
+                fit: BoxFit.contain,
+                colorFilter: ColorFilter.mode(frontColor, BlendMode.srcIn),
+              ),
+            ],
           ),
         ),
       ),
