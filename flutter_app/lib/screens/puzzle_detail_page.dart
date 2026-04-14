@@ -57,10 +57,23 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
     }
   }
 
+  @override
+  void didUpdateWidget(covariant PuzzleDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.index != widget.index ||
+        oldWidget.puzzle.fen != widget.puzzle.fen ||
+        oldWidget.puzzle.bestMoveUci != widget.puzzle.bestMoveUci ||
+        oldWidget.initialResult != widget.initialResult) {
+      _resetPuzzle();
+    }
+  }
+
   void _resetPuzzle() {
     _currentFen = widget.puzzle.fen;
     _selectedSquare = null;
     _highlightSquare = null;
+    _reveal = false;
     _lastResult = widget.initialResult == true ? true : null;
     _celebrationCount = widget.initialResult == true ? 1 : 0;
   }
