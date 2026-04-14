@@ -309,6 +309,8 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
+          leading: const SizedBox.shrink(),
+          leadingWidth: 0,
           title: const Text('Your move'),
           toolbarHeight: 60,
           actions: [

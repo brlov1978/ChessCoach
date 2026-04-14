@@ -452,20 +452,24 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _buildStatusCard(context),
+                const CircularProgressIndicator(),
                 const SizedBox(height: 16),
-                _buildFeedbackCard(context),
-                const SizedBox(height: 12),
+                Text(
+                  _errorMessage ?? 'Preparing your first puzzle...',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
                 const Text(
-                  'Use the gear icon anytime to update your training settings.',
+                  'The training board will appear here automatically.',
                   textAlign: TextAlign.center,
                 ),
               ],
