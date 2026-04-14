@@ -1,5 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <path d="M30 78h44l-4-10c2-8 1-15-2-22-4-8-10-13-18-19 6-1 11-5 14-11-12-1-21 2-28 10-6 7-7 16-4 28l-8 24z" fill="currentColor"/>
-  <circle cx="57" cy="27" r="3" fill="rgba(255,255,255,0.35)"/>
-  <rect x="20" y="80" width="62" height="8" rx="3" fill="currentColor"/>
+  <g fill="currentColor">
+    <path d="M30 78h45c-2-5-4-9-4-13 0-7 1-13-2-20-4-10-13-17-24-24 9-1 15-4 19-9-12-2-23 2-31 11-7 8-8 18-4 31l-7 24z"/>
+    <rect x="20" y="80" width="62" height="8" rx="2.5"/>
+  </g>
+  <circle cx="55" cy="27" r="2.8" fill="rgba(255,255,255,0.28)"/>
 </svg>

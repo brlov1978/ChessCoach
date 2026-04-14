@@ -1,10 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <circle cx="24" cy="20" r="5" fill="currentColor"/>
-  <circle cx="40" cy="14" r="5" fill="currentColor"/>
-  <circle cx="60" cy="14" r="5" fill="currentColor"/>
-  <circle cx="76" cy="20" r="5" fill="currentColor"/>
-  <path d="M26 26h48l-7 16-12-9-5 12-5-12-12 9z" fill="currentColor"/>
-  <path d="M30 44h40l6 24H24z" fill="currentColor"/>
-  <rect x="24" y="70" width="52" height="9" rx="3" fill="currentColor"/>
-  <rect x="18" y="81" width="64" height="7" rx="3" fill="currentColor"/>
+  <g fill="currentColor">
+    <circle cx="22" cy="22" r="4.5"/>
+    <circle cx="38" cy="15" r="4.5"/>
+    <circle cx="50" cy="12" r="4.5"/>
+    <circle cx="62" cy="15" r="4.5"/>
+    <circle cx="78" cy="22" r="4.5"/>
+    <path d="M24 28h52l-6 16-12-11-8 13-8-13-12 11z"/>
+    <path d="M31 44h38c6 7 8 15 8 24H23c0-9 2-17 8-24z"/>
+    <rect x="24" y="69" width="52" height="9" rx="2.5"/>
+    <rect x="18" y="79" width="64" height="8" rx="2.5"/>
+  </g>
 </svg>
