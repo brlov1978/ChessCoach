@@ -8,15 +8,5 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
-    buildCommand: |
-      pip install -r requirements.txt
-      export FLUTTER_ROOT="$HOME/flutter"
-      if [ ! -d "$FLUTTER_ROOT" ]; then
-        git clone https://github.com/flutter/flutter.git -b stable "$FLUTTER_ROOT"
-      fi
-      export PATH="$FLUTTER_ROOT/bin:$PATH"
-      flutter config --enable-web
-      cd flutter_app
-      flutter pub get
-      flutter build web --release
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
