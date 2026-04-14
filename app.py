@@ -12,6 +12,12 @@ from chess_coach.puzzle_generator import generate_puzzles
 
 ROOT_DIR = Path(__file__).resolve().parent
 FRONTEND_BUILD_DIR = ROOT_DIR / "flutter_app" / "build" / "web"
+NO_CACHE_FILES = {
+    "index.html",
+    "flutter_service_worker.js",
+    "manifest.json",
+    "version.json",
+}
 
 
 def _coerce_int(value: Any, default: int, *, min_value: int, max_value: int) -> int:
@@ -28,6 +34,15 @@ def _serialize_puzzle(puzzle: Any) -> dict[str, Any]:
     return dict(puzzle)
 
 
+def _send_frontend_file(path: str):
+    response = send_from_directory(FRONTEND_BUILD_DIR, path)
+    if path in NO_CACHE_FILES:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app)
@@ -35,7 +50,7 @@ def create_app() -> Flask:
     @app.get("/")
     def index():
         if (FRONTEND_BUILD_DIR / "index.html").exists():
-            return send_from_directory(FRONTEND_BUILD_DIR, "index.html")
+            return _send_frontend_file("index.html")
 
         return jsonify(
             {
@@ -81,10 +96,10 @@ def create_app() -> Flask:
     def frontend(path: str):
         asset_path = FRONTEND_BUILD_DIR / path
         if asset_path.exists() and asset_path.is_file():
-            return send_from_directory(FRONTEND_BUILD_DIR, path)
+            return _send_frontend_file(path)
 
         if (FRONTEND_BUILD_DIR / "index.html").exists():
-            return send_from_directory(FRONTEND_BUILD_DIR, "index.html")
+            return _send_frontend_file("index.html")
 
         return jsonify({"error": "Not found."}), 404
 
