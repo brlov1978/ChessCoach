@@ -306,6 +306,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Your move'),
         toolbarHeight: 60,
         actions: [

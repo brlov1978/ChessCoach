@@ -68,6 +68,53 @@ void main() {
     expect(find.textContaining('Drag'), findsWidgets);
   });
 
+  testWidgets('Puzzle detail hides app bar back button', (WidgetTester tester) async {
+    const puzzle = PuzzleData(
+      title: 'Find the best move for White',
+      fen: 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 2',
+      bestMoveUci: 'f3e5',
+      bestMoveSan: 'Nxe5',
+      actualMoveSan: 'Nxe5',
+      evaluationCp: 250,
+      mateIn: null,
+      sourceUrl: 'https://example.com',
+      opening: 'Italian Game',
+      opponent: 'Opponent',
+      playerColor: 'White',
+      reason: 'A tactical shot wins material.',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => PuzzleDetailPage(
+                        index: 1,
+                        puzzle: puzzle,
+                        onAttempt: (_) {},
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Open puzzle'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open puzzle'));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+  });
+
   testWidgets('Puzzle detail shows celebration controls after solve', (WidgetTester tester) async {
     const puzzle = PuzzleData(
       title: 'Find the best move for White',
