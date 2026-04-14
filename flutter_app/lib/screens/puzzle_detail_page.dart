@@ -304,117 +304,127 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
   Widget build(BuildContext context) {
     final puzzle = widget.puzzle;
 
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: const Text('Your move'),
-        toolbarHeight: 60,
-        actions: [
-          if (widget.onOpenSettings != null)
-            IconButton(
-              onPressed: widget.onOpenSettings,
-              icon: const Icon(Icons.settings),
-              tooltip: 'Settings',
-            ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(78),
-          child: _buildHeaderSnapshot(context),
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: const Text('Your move'),
+          toolbarHeight: 60,
+          actions: [
+            if (widget.onOpenSettings != null)
+              IconButton(
+                onPressed: widget.onOpenSettings,
+                icon: const Icon(Icons.settings),
+                tooltip: 'Settings',
+              ),
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(78),
+            child: _buildHeaderSnapshot(context),
+          ),
         ),
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final boardSize = constraints.maxWidth < 640 ? (constraints.maxWidth - 84).clamp(260.0, 560.0).toDouble() : 520.0;
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final boardSize = constraints.maxWidth < 640 ? (constraints.maxWidth - 84).clamp(260.0, 560.0).toDouble() : 520.0;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      puzzle.title,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Drag a piece to solve the puzzle. Tapping also works.'),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: SizedBox(
-                        width: boardSize + 72,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _EvalBar(
-                              evaluationCp: puzzle.evaluationCp,
-                              mateIn: puzzle.mateIn,
-                              height: boardSize,
-                            ),
-                            const SizedBox(width: 12),
-                            SizedBox(
-                              width: boardSize,
-                              height: boardSize,
-                              child: ChessBoardView(
-                                fen: _currentFen,
-                                selectedSquare: _selectedSquare,
-                                highlightSquare: _highlightSquare,
-                                onSquareTap: _handleSquareTap,
-                                onMoveAttempt: _handleMoveAttempt,
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        puzzle.title,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Drag a piece to solve the puzzle. Tapping also works.',
+                      ),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: SizedBox(
+                          width: boardSize + 72,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _EvalBar(
+                                evaluationCp: puzzle.evaluationCp,
+                                mateIn: puzzle.mateIn,
+                                height: boardSize,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: boardSize,
+                                height: boardSize,
+                                child: ChessBoardView(
+                                  fen: _currentFen,
+                                  selectedSquare: _selectedSquare,
+                                  highlightSquare: _highlightSquare,
+                                  onSquareTap: _handleSquareTap,
+                                  onMoveAttempt: _handleMoveAttempt,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    if (_lastResult == true) ...[
-                      const SizedBox(height: 16),
-                      _buildCelebrationCard(),
-                    ] else if (_lastResult == false) ...[
-                      const SizedBox(height: 16),
-                      _buildTryAgainCard(),
-                    ],
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 8,
-                      children: [
-                        InfoChip(label: 'Opening', value: puzzle.opening),
-                        InfoChip(label: 'Opponent', value: puzzle.opponent),
-                        InfoChip(label: 'Side', value: puzzle.playerColor),
+                      if (_lastResult == true) ...[
+                        const SizedBox(height: 16),
+                        _buildCelebrationCard(),
+                      ] else if (_lastResult == false) ...[
+                        const SizedBox(height: 16),
+                        _buildTryAgainCard(),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(puzzle.reason),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 8,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () => setState(() => _reveal = !_reveal),
-                          child: Text(_reveal ? 'Hide solution' : 'Reveal solution'),
-                        ),
-                        TextButton(
-                          onPressed: () => setState(_resetPuzzle),
-                          child: const Text('Reset board'),
-                        ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          InfoChip(label: 'Opening', value: puzzle.opening),
+                          InfoChip(label: 'Opponent', value: puzzle.opponent),
+                          InfoChip(label: 'Side', value: puzzle.playerColor),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(puzzle.reason),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => setState(() => _reveal = !_reveal),
+                            child: Text(
+                              _reveal ? 'Hide solution' : 'Reveal solution',
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => setState(_resetPuzzle),
+                            child: const Text('Reset board'),
+                          ),
+                        ],
+                      ),
+                      if (_reveal || _lastResult == true) ...[
+                        const SizedBox(height: 8),
+                        Text('Best move: ${puzzle.bestMoveSan}'),
+                        if (puzzle.actualMoveSan != null)
+                          Text(
+                            'Move played in the game: ${puzzle.actualMoveSan}',
+                          ),
+                        if (puzzle.sourceUrl.isNotEmpty) SelectableText('Source game: ${puzzle.sourceUrl}'),
                       ],
-                    ),
-                    if (_reveal || _lastResult == true) ...[
-                      const SizedBox(height: 8),
-                      Text('Best move: ${puzzle.bestMoveSan}'),
-                      if (puzzle.actualMoveSan != null) Text('Move played in the game: ${puzzle.actualMoveSan}'),
-                      if (puzzle.sourceUrl.isNotEmpty) SelectableText('Source game: ${puzzle.sourceUrl}'),
                     ],
-                  ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }

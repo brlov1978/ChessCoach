@@ -33,6 +33,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
   List<PuzzleData> _puzzles = const [];
   Map<String, dynamic>? _stats;
   int _gamesCount = 0;
+  int _currentPuzzleIndex = 0;
   final Map<int, bool> _puzzleResults = <int, bool>{};
 
   @override
@@ -104,9 +105,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       _errorMessage = null;
     });
 
-    if (!Navigator.of(context).canPop()) {
-      unawaited(_startSeamlessSession(force: true));
-    }
+    unawaited(_startSeamlessSession(force: true));
   }
 
   Future<void> _startSeamlessSession({bool force = false}) async {
@@ -161,6 +160,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
         _puzzleResults.clear();
         _stats = null;
         _gamesCount = 0;
+        _currentPuzzleIndex = 0;
       }
     });
 
@@ -208,15 +208,18 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
         _stats = Map<String, dynamic>.from(payload['stats'] as Map? ?? <String, dynamic>{});
         _gamesCount = payload['games_count'] as int? ?? 0;
 
+        if (openFirstPuzzle && _puzzles.isNotEmpty) {
+          _hasOpenedFirstPuzzle = true;
+          _currentPuzzleIndex = 0;
+        }
+
         if (!background && _puzzles.isEmpty) {
           _errorMessage = 'No puzzles were found right now. Open settings to try different training options.';
         }
       });
 
-      if (openFirstPuzzle && _puzzles.isNotEmpty && !_hasOpenedFirstPuzzle && mounted) {
-        _hasOpenedFirstPuzzle = true;
-        _openPuzzle(context, 0);
-        unawaited(_prefetchMorePuzzles(currentIndex: 0));
+      if (openFirstPuzzle && _puzzles.isNotEmpty && mounted) {
+        unawaited(_prefetchMorePuzzles(currentIndex: _currentPuzzleIndex));
       }
     } on TimeoutException {
       if (!mounted) {
@@ -279,53 +282,32 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     });
   }
 
-  Future<void> _goToNextPuzzle(BuildContext context, int currentIndex) async {
-    final navigator = Navigator.of(context);
-    final nextIndex = currentIndex + 1;
+  Future<void> _goToNextPuzzle() async {
+    final nextIndex = _currentPuzzleIndex + 1;
 
     if (nextIndex < _puzzles.length) {
+      setState(() {
+        _currentPuzzleIndex = nextIndex;
+      });
       unawaited(_prefetchMorePuzzles(currentIndex: nextIndex));
-      navigator.pushReplacement(_buildPuzzleRoute(context, nextIndex));
       return;
     }
 
-    await _prefetchMorePuzzles(currentIndex: currentIndex);
+    await _prefetchMorePuzzles(currentIndex: _currentPuzzleIndex);
 
     if (!mounted) {
       return;
     }
 
-    if (nextIndex < _puzzles.length) {
-      navigator.pushReplacement(_buildPuzzleRoute(context, nextIndex));
+    if (_currentPuzzleIndex + 1 < _puzzles.length) {
+      setState(() {
+        _currentPuzzleIndex += 1;
+      });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Finding your next puzzle...')),
       );
     }
-  }
-
-  MaterialPageRoute<void> _buildPuzzleRoute(BuildContext context, int puzzleIndex) {
-    return MaterialPageRoute<void>(
-      builder: (routeContext) => PuzzleDetailPage(
-        index: puzzleIndex + 1,
-        puzzle: _puzzles[puzzleIndex],
-        initialResult: _puzzleResults[puzzleIndex],
-        onAttempt: (isCorrect) => _recordAttempt(puzzleIndex, isCorrect),
-        onNextPuzzle: () => _goToNextPuzzle(routeContext, puzzleIndex),
-        onOpenSettings: () => _openSettings(context),
-        gamesCount: _gamesCount,
-        puzzleCount: _puzzles.length,
-        attemptCount: _puzzleResults.length,
-        correctCount: _puzzleResults.values.where((value) => value).length,
-        stats: _stats,
-        isPreparingNext: _isBuffering,
-      ),
-    );
-  }
-
-  void _openPuzzle(BuildContext context, int puzzleIndex) {
-    unawaited(_prefetchMorePuzzles(currentIndex: puzzleIndex));
-    Navigator.of(context).push(_buildPuzzleRoute(context, puzzleIndex));
   }
 
   Widget _buildStatusCard(BuildContext context) {
@@ -440,6 +422,25 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_hasOpenedFirstPuzzle && _puzzles.isNotEmpty) {
+      final currentIndex = _currentPuzzleIndex < _puzzles.length ? _currentPuzzleIndex : _puzzles.length - 1;
+
+      return PuzzleDetailPage(
+        index: currentIndex + 1,
+        puzzle: _puzzles[currentIndex],
+        initialResult: _puzzleResults[currentIndex],
+        onAttempt: (isCorrect) => _recordAttempt(currentIndex, isCorrect),
+        onNextPuzzle: _goToNextPuzzle,
+        onOpenSettings: () => _openSettings(context),
+        gamesCount: _gamesCount,
+        puzzleCount: _puzzles.length,
+        attemptCount: _puzzleResults.length,
+        correctCount: _puzzleResults.values.where((value) => value).length,
+        stats: _stats,
+        isPreparingNext: _isBuffering,
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('♟ Chess Coach'),
