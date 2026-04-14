@@ -9,6 +9,9 @@ class TrainingSettings {
     required this.maxGames,
     required this.maxPuzzles,
     required this.analysisDepth,
+    required this.speedMode,
+    required this.difficulty,
+    required this.timeCapSeconds,
   });
 
   final String backendUrl;
@@ -16,6 +19,9 @@ class TrainingSettings {
   final double maxGames;
   final double maxPuzzles;
   final double analysisDepth;
+  final String speedMode;
+  final String difficulty;
+  final double timeCapSeconds;
 }
 
 class SettingsPage extends StatefulWidget {
@@ -36,6 +42,9 @@ class _SettingsPageState extends State<SettingsPage> {
   late double _maxGames;
   late double _maxPuzzles;
   late double _analysisDepth;
+  late String _speedMode;
+  late String _difficulty;
+  late double _timeCapSeconds;
 
   @override
   void initState() {
@@ -45,6 +54,9 @@ class _SettingsPageState extends State<SettingsPage> {
     _maxGames = widget.initialSettings.maxGames;
     _maxPuzzles = widget.initialSettings.maxPuzzles;
     _analysisDepth = widget.initialSettings.analysisDepth;
+    _speedMode = widget.initialSettings.speedMode;
+    _difficulty = widget.initialSettings.difficulty;
+    _timeCapSeconds = widget.initialSettings.timeCapSeconds;
   }
 
   @override
@@ -52,6 +64,28 @@ class _SettingsPageState extends State<SettingsPage> {
     _backendUrlController.dispose();
     _usernameController.dispose();
     super.dispose();
+  }
+
+  String _speedModeDescription() {
+    switch (_speedMode) {
+      case 'fast':
+        return 'Fast mode scans fewer positions and returns results sooner.';
+      case 'deep':
+        return 'Deep mode spends longer searching for stronger puzzle candidates.';
+      default:
+        return 'Balanced mode keeps puzzle quality high without long waits.';
+    }
+  }
+
+  String _difficultyDescription() {
+    switch (_difficulty) {
+      case 'easy':
+        return 'Easier tactics and more obvious winning ideas.';
+      case 'hard':
+        return 'Sharper positions with bigger tactical demands.';
+      default:
+        return 'A solid mix of practical tactics and challenging moves.';
+    }
   }
 
   void _save() {
@@ -62,6 +96,9 @@ class _SettingsPageState extends State<SettingsPage> {
         maxGames: _maxGames,
         maxPuzzles: _maxPuzzles,
         analysisDepth: _analysisDepth,
+        speedMode: _speedMode,
+        difficulty: _difficulty,
+        timeCapSeconds: _timeCapSeconds,
       ),
     );
   }
@@ -109,6 +146,57 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: _speedMode,
+                      decoration: const InputDecoration(
+                        labelText: 'Speed mode',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'fast', child: Text('Fast')),
+                        DropdownMenuItem(
+                          value: 'balanced',
+                          child: Text('Balanced'),
+                        ),
+                        DropdownMenuItem(value: 'deep', child: Text('Deep')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _speedMode = value);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Text(_speedModeDescription()),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: _difficulty,
+                      decoration: const InputDecoration(
+                        labelText: 'Difficulty',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'easy', child: Text('Easy')),
+                        DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                        DropdownMenuItem(value: 'hard', child: Text('Hard')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _difficulty = value);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Text(_difficultyDescription()),
+                    const SizedBox(height: 16),
+                    SliderField(
+                      label: 'Generation time cap',
+                      value: _timeCapSeconds,
+                      min: 10,
+                      max: 30,
+                      divisions: 4,
+                      onChanged: (value) => setState(() => _timeCapSeconds = value),
+                    ),
                     SliderField(
                       label: 'Recent games to scan',
                       value: _maxGames,

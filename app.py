@@ -28,6 +28,11 @@ def _coerce_int(value: Any, default: int, *, min_value: int, max_value: int) -> 
     return max(min_value, min(max_value, parsed))
 
 
+def _coerce_choice(value: Any, default: str, *, allowed: set[str]) -> str:
+    parsed = str(value or "").strip().lower()
+    return parsed if parsed in allowed else default
+
+
 def _serialize_puzzle(puzzle: Any) -> dict[str, Any]:
     if hasattr(puzzle, "to_dict"):
         return puzzle.to_dict()
@@ -74,6 +79,32 @@ def create_app() -> Flask:
         max_games = _coerce_int(payload.get("max_games"), 15, min_value=1, max_value=100)
         max_puzzles = _coerce_int(payload.get("max_puzzles"), 6, min_value=1, max_value=20)
         analysis_depth = _coerce_int(payload.get("analysis_depth"), 12, min_value=6, max_value=18)
+        speed_mode = _coerce_choice(
+            payload.get("speed_mode"),
+            "balanced",
+            allowed={"fast", "balanced", "deep"},
+        )
+        difficulty = _coerce_choice(
+            payload.get("difficulty"),
+            "medium",
+            allowed={"easy", "medium", "hard"},
+        )
+        time_budget_seconds = _coerce_int(
+            payload.get("time_budget_seconds"),
+            20,
+            min_value=10,
+            max_value=30,
+        )
+
+        speed_profiles = {
+            "fast": {"max_games_cap": 20, "max_depth_cap": 10, "time_cap": 12, "multipv": 1},
+            "balanced": {"max_games_cap": 50, "max_depth_cap": 14, "time_cap": 20, "multipv": 2},
+            "deep": {"max_games_cap": 100, "max_depth_cap": 18, "time_cap": 30, "multipv": 3},
+        }
+        profile = speed_profiles[speed_mode]
+        max_games = min(max_games, profile["max_games_cap"])
+        analysis_depth = min(analysis_depth, profile["max_depth_cap"])
+        time_budget_seconds = min(time_budget_seconds, profile["time_cap"])
 
         games = fetch_recent_games(username, max_games=max_games)
         puzzles, stats = generate_puzzles(
@@ -81,6 +112,9 @@ def create_app() -> Flask:
             username=username,
             max_puzzles=max_puzzles,
             analysis_depth=analysis_depth,
+            difficulty_level=difficulty,
+            time_budget_seconds=time_budget_seconds,
+            multipv=profile["multipv"],
         )
 
         return jsonify(

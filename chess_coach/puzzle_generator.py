@@ -163,6 +163,16 @@ def _score_gap(lines: list[dict[str, Any]]) -> int:
     return lines[0]["score"] - lines[1]["score"]
 
 
+def _difficulty_thresholds(level: str) -> dict[str, int]:
+    normalized = level.strip().lower()
+    presets = {
+        "easy": {"min_strength": 130, "min_gap": 40, "min_unplayed": 250},
+        "medium": {"min_strength": 180, "min_gap": 70, "min_unplayed": 320},
+        "hard": {"min_strength": 260, "min_gap": 120, "min_unplayed": 420},
+    }
+    return presets.get(normalized, presets["medium"])
+
+
 PIECE_VALUES = {
     chess.PAWN: 100,
     chess.KNIGHT: 320,
@@ -208,9 +218,11 @@ def generate_puzzles(
     analysis_depth: int = 12,
     evaluator: PositionEvaluator | None = None,
     time_budget_seconds: float = 20.0,
+    difficulty_level: str = "medium",
+    multipv: int = 2,
 ) -> tuple[list[PuzzleCandidate], dict[str, Any]]:
     created_evaluator = evaluator is None
-    evaluator = evaluator or PositionEvaluator(depth=analysis_depth)
+    evaluator = evaluator or PositionEvaluator(depth=analysis_depth, multipv=multipv)
 
     primary_puzzles: list[PuzzleCandidate] = []
     fallback_puzzles: list[PuzzleCandidate] = []
@@ -218,6 +230,7 @@ def generate_puzzles(
     positions_checked = 0
     deadline = time.perf_counter() + max(8.0, time_budget_seconds)
     max_positions_per_game = max(2, min(4, max_puzzles))
+    difficulty_rules = _difficulty_thresholds(difficulty_level)
 
     try:
         for game_data in games:
@@ -274,14 +287,14 @@ def generate_puzzles(
                 mate_in = best.get("mate")
                 gap = _score_gap(lines)
 
-                if mate_in is None and strength_score < 180:
+                if mate_in is None and strength_score < difficulty_rules["min_strength"]:
                     continue
-                if mate_in is None and gap < 70 and strength_score < 320:
+                if mate_in is None and gap < difficulty_rules["min_gap"] and strength_score < difficulty_rules["min_unplayed"]:
                     continue
 
                 next_move = moves[ply_index + 1] if ply_index + 1 < len(moves) else None
                 played_best_move = next_move == best["move"] if next_move else False
-                if not played_best_move and mate_in is None and strength_score < 320:
+                if not played_best_move and mate_in is None and strength_score < difficulty_rules["min_unplayed"]:
                     continue
 
                 fen = board.fen()
@@ -337,5 +350,7 @@ def generate_puzzles(
         "games_scanned": len(games),
         "positions_checked": positions_checked,
         "engine_source": evaluator.source,
+        "difficulty": difficulty_level,
+        "time_budget_seconds": round(time_budget_seconds, 1),
     }
     return puzzles, stats

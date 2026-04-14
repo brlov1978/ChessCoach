@@ -22,6 +22,9 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
   double _maxGames = 10;
   double _maxPuzzles = 5;
   double _analysisDepth = 10;
+  String _speedMode = 'balanced';
+  String _difficulty = 'medium';
+  double _timeCapSeconds = 20;
   bool _isLoading = false;
   String? _errorMessage;
   List<PuzzleData> _puzzles = const [];
@@ -42,6 +45,13 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     return isLocalHost ? 'http://127.0.0.1:8000' : Uri.base.origin;
   }
 
+  String _displayLabel(String value) {
+    if (value.isEmpty) {
+      return value;
+    }
+    return value[0].toUpperCase() + value.substring(1);
+  }
+
   @override
   void dispose() {
     _backendUrlController.dispose();
@@ -56,6 +66,9 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       maxGames: _maxGames,
       maxPuzzles: _maxPuzzles,
       analysisDepth: _analysisDepth,
+      speedMode: _speedMode,
+      difficulty: _difficulty,
+      timeCapSeconds: _timeCapSeconds,
     );
   }
 
@@ -76,6 +89,9 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       _maxGames = settings.maxGames;
       _maxPuzzles = settings.maxPuzzles;
       _analysisDepth = settings.analysisDepth;
+      _speedMode = settings.speedMode;
+      _difficulty = settings.difficulty;
+      _timeCapSeconds = settings.timeCapSeconds;
       _errorMessage = null;
     });
   }
@@ -106,6 +122,9 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
               'max_games': _maxGames.round(),
               'max_puzzles': _maxPuzzles.round(),
               'analysis_depth': _analysisDepth.round(),
+              'speed_mode': _speedMode,
+              'difficulty': _difficulty,
+              'time_budget_seconds': _timeCapSeconds.round(),
             }),
           )
           .timeout(const Duration(seconds: 45));
@@ -233,6 +252,18 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
                 Chip(
                   avatar: const Icon(Icons.analytics, size: 18),
                   label: Text('Depth ${_analysisDepth.round()}'),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.speed, size: 18),
+                  label: Text(_displayLabel(_speedMode)),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.trending_up, size: 18),
+                  label: Text(_displayLabel(_difficulty)),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.timer_outlined, size: 18),
+                  label: Text('${_timeCapSeconds.round()}s cap'),
                 ),
               ],
             ),
