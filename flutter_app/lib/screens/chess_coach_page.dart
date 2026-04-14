@@ -34,6 +34,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
   Map<String, dynamic>? _stats;
   int _gamesCount = 0;
   int _currentPuzzleIndex = 0;
+  Future<void>? _bufferingTask;
   final Map<int, bool> _puzzleResults = <int, bool>{};
 
   @override
@@ -60,6 +61,15 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       return value;
     }
     return value[0].toUpperCase() + value.substring(1);
+  }
+
+  int _targetBufferSize() {
+    return _maxPuzzles.round().clamp(2, 12);
+  }
+
+  int _initialBatchSize() {
+    final target = _targetBufferSize();
+    return target >= 3 ? 3 : target;
   }
 
   @override
@@ -118,7 +128,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
 
     await _generatePuzzles(
       openFirstPuzzle: true,
-      requestedBatchSize: 1,
+      requestedBatchSize: _initialBatchSize(),
       resetSession: true,
       background: false,
     );
@@ -161,6 +171,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
         _stats = null;
         _gamesCount = 0;
         _currentPuzzleIndex = 0;
+        _bufferingTask = null;
       }
     });
 
@@ -255,22 +266,32 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
   }
 
   Future<void> _prefetchMorePuzzles({required int currentIndex}) async {
-    final bufferTarget = _maxPuzzles.round().clamp(2, 12);
-    final remaining = _puzzles.length - currentIndex - 1;
+    final bufferTarget = _targetBufferSize();
+    final remaining = (_puzzles.length - currentIndex - 1).clamp(0, 9999);
+    final missing = bufferTarget - remaining;
 
-    if (_isLoading || _isBuffering || bufferTarget <= 1) {
-      return;
-    }
-    if (remaining >= 2 || _puzzles.length >= bufferTarget) {
+    if (_isLoading || bufferTarget <= 1 || missing <= 0) {
       return;
     }
 
-    await _generatePuzzles(
+    if (_bufferingTask != null) {
+      await _bufferingTask;
+      return;
+    }
+
+    final task = _generatePuzzles(
       openFirstPuzzle: false,
-      requestedBatchSize: bufferTarget,
+      requestedBatchSize: missing.clamp(2, bufferTarget),
       resetSession: false,
       background: true,
     );
+
+    _bufferingTask = task;
+    try {
+      await task;
+    } finally {
+      _bufferingTask = null;
+    }
   }
 
   void _recordAttempt(int puzzleIndex, bool isCorrect) {
@@ -283,13 +304,13 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
   }
 
   Future<void> _goToNextPuzzle() async {
-    final nextIndex = _currentPuzzleIndex + 1;
+    final immediateNextIndex = _currentPuzzleIndex + 1;
 
-    if (nextIndex < _puzzles.length) {
+    if (immediateNextIndex < _puzzles.length) {
       setState(() {
-        _currentPuzzleIndex = nextIndex;
+        _currentPuzzleIndex = immediateNextIndex;
       });
-      unawaited(_prefetchMorePuzzles(currentIndex: nextIndex));
+      unawaited(_prefetchMorePuzzles(currentIndex: immediateNextIndex));
       return;
     }
 
@@ -299,10 +320,12 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       return;
     }
 
-    if (_currentPuzzleIndex + 1 < _puzzles.length) {
+    final refreshedNextIndex = _currentPuzzleIndex + 1;
+    if (refreshedNextIndex < _puzzles.length) {
       setState(() {
-        _currentPuzzleIndex += 1;
+        _currentPuzzleIndex = refreshedNextIndex;
       });
+      unawaited(_prefetchMorePuzzles(currentIndex: refreshedNextIndex));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Finding your next puzzle...')),
@@ -426,6 +449,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       final currentIndex = _currentPuzzleIndex < _puzzles.length ? _currentPuzzleIndex : _puzzles.length - 1;
 
       return PuzzleDetailPage(
+        key: ValueKey('puzzle-$currentIndex-${_puzzles[currentIndex].fen}'),
         index: currentIndex + 1,
         puzzle: _puzzles[currentIndex],
         initialResult: _puzzleResults[currentIndex],
