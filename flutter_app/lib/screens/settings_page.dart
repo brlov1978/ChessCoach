@@ -126,7 +126,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Adjust your Chess.com username, backend URL, and puzzle generation settings here.',
+                      'Adjust your Chess.com username, backend URL, and continuous training settings here.',
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -206,7 +206,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       onChanged: (value) => setState(() => _maxGames = value),
                     ),
                     SliderField(
-                      label: 'Max puzzle candidates',
+                      label: 'Background puzzle buffer',
                       value: _maxPuzzles,
                       min: 1,
                       max: 12,

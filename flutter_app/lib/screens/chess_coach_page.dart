@@ -26,6 +26,9 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
   String _difficulty = 'medium';
   double _timeCapSeconds = 20;
   bool _isLoading = false;
+  bool _isBuffering = false;
+  bool _hasStartedAutoLoad = false;
+  bool _hasOpenedFirstPuzzle = false;
   String? _errorMessage;
   List<PuzzleData> _puzzles = const [];
   Map<String, dynamic>? _stats;
@@ -37,6 +40,12 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     super.initState();
     _backendUrlController = TextEditingController(text: _defaultBackendUrl());
     _usernameController = TextEditingController(text: 'hikaru');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_startSeamlessSession());
+      }
+    });
   }
 
   String _defaultBackendUrl() {
@@ -94,9 +103,34 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       _timeCapSeconds = settings.timeCapSeconds;
       _errorMessage = null;
     });
+
+    if (!Navigator.of(context).canPop()) {
+      unawaited(_startSeamlessSession(force: true));
+    }
   }
 
-  Future<void> _generatePuzzles() async {
+  Future<void> _startSeamlessSession({bool force = false}) async {
+    if ((_hasStartedAutoLoad && !force) || _isLoading) {
+      return;
+    }
+
+    _hasStartedAutoLoad = true;
+    _hasOpenedFirstPuzzle = false;
+
+    await _generatePuzzles(
+      openFirstPuzzle: true,
+      requestedBatchSize: 1,
+      resetSession: true,
+      background: false,
+    );
+  }
+
+  Future<void> _generatePuzzles({
+    required bool openFirstPuzzle,
+    required int requestedBatchSize,
+    required bool resetSession,
+    required bool background,
+  }) async {
     final baseUrl = _backendUrlController.text.trim().replaceAll(RegExp(r'/$'), '');
     final username = _usernameController.text.trim();
 
@@ -107,9 +141,27 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       return;
     }
 
+    if (background && (_isLoading || _isBuffering)) {
+      return;
+    }
+    if (!background && _isLoading) {
+      return;
+    }
+
     setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+      if (background) {
+        _isBuffering = true;
+      } else {
+        _isLoading = true;
+        _errorMessage = null;
+      }
+
+      if (resetSession) {
+        _puzzles = const [];
+        _puzzleResults.clear();
+        _stats = null;
+        _gamesCount = 0;
+      }
     });
 
     try {
@@ -120,7 +172,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
             body: jsonEncode({
               'username': username,
               'max_games': _maxGames.round(),
-              'max_puzzles': _maxPuzzles.round(),
+              'max_puzzles': requestedBatchSize,
               'analysis_depth': _analysisDepth.round(),
               'speed_mode': _speedMode,
               'difficulty': _difficulty,
@@ -143,41 +195,79 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       }
 
       setState(() {
-        _puzzles = puzzleList;
+        final merged = resetSession ? <PuzzleData>[] : <PuzzleData>[..._puzzles];
+        final seenFens = merged.map((puzzle) => puzzle.fen).toSet();
+
+        for (final puzzle in puzzleList) {
+          if (seenFens.add(puzzle.fen)) {
+            merged.add(puzzle);
+          }
+        }
+
+        _puzzles = merged;
         _stats = Map<String, dynamic>.from(payload['stats'] as Map? ?? <String, dynamic>{});
         _gamesCount = payload['games_count'] as int? ?? 0;
-        _puzzleResults.clear();
-        if (puzzleList.isEmpty) {
-          _errorMessage = 'No puzzles were found in those recent games. Try a different username or broader search.';
+
+        if (!background && _puzzles.isEmpty) {
+          _errorMessage = 'No puzzles were found right now. Open settings to try different training options.';
         }
       });
 
-      if (puzzleList.isNotEmpty) {
+      if (openFirstPuzzle && _puzzles.isNotEmpty && !_hasOpenedFirstPuzzle && mounted) {
+        _hasOpenedFirstPuzzle = true;
         _openPuzzle(context, 0);
+        unawaited(_prefetchMorePuzzles(currentIndex: 0));
       }
     } on TimeoutException {
       if (!mounted) {
         return;
       }
 
-      setState(() {
-        _errorMessage = 'Puzzle generation took too long. Try fewer games or a lower analysis depth.';
-      });
+      if (!background) {
+        setState(() {
+          _errorMessage = 'Still searching for a good puzzle. Try Fast mode or a shorter time cap.';
+        });
+      }
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      setState(() {
-        _errorMessage = error.toString().replaceFirst('Exception: ', '');
-      });
+      if (!background) {
+        setState(() {
+          _errorMessage = error.toString().replaceFirst('Exception: ', '');
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          if (background) {
+            _isBuffering = false;
+          } else {
+            _isLoading = false;
+          }
         });
       }
     }
+  }
+
+  Future<void> _prefetchMorePuzzles({required int currentIndex}) async {
+    final bufferTarget = _maxPuzzles.round().clamp(2, 12);
+    final remaining = _puzzles.length - currentIndex - 1;
+
+    if (_isLoading || _isBuffering || bufferTarget <= 1) {
+      return;
+    }
+    if (remaining >= 2 || _puzzles.length >= bufferTarget) {
+      return;
+    }
+
+    await _generatePuzzles(
+      openFirstPuzzle: false,
+      requestedBatchSize: bufferTarget,
+      resetSession: false,
+      background: true,
+    );
   }
 
   void _recordAttempt(int puzzleIndex, bool isCorrect) {
@@ -189,29 +279,52 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     });
   }
 
+  Future<void> _goToNextPuzzle(BuildContext context, int currentIndex) async {
+    final navigator = Navigator.of(context);
+    final nextIndex = currentIndex + 1;
+
+    if (nextIndex < _puzzles.length) {
+      unawaited(_prefetchMorePuzzles(currentIndex: nextIndex));
+      navigator.pushReplacement(_buildPuzzleRoute(context, nextIndex));
+      return;
+    }
+
+    await _prefetchMorePuzzles(currentIndex: currentIndex);
+
+    if (!mounted) {
+      return;
+    }
+
+    if (nextIndex < _puzzles.length) {
+      navigator.pushReplacement(_buildPuzzleRoute(context, nextIndex));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Finding your next puzzle...')),
+      );
+    }
+  }
+
   MaterialPageRoute<void> _buildPuzzleRoute(BuildContext context, int puzzleIndex) {
     return MaterialPageRoute<void>(
-      builder: (_) => PuzzleDetailPage(
+      builder: (routeContext) => PuzzleDetailPage(
         index: puzzleIndex + 1,
         puzzle: _puzzles[puzzleIndex],
         initialResult: _puzzleResults[puzzleIndex],
         onAttempt: (isCorrect) => _recordAttempt(puzzleIndex, isCorrect),
-        onNextPuzzle: puzzleIndex + 1 < _puzzles.length
-            ? () => Navigator.of(context).pushReplacement(
-                  _buildPuzzleRoute(context, puzzleIndex + 1),
-                )
-            : null,
+        onNextPuzzle: () => _goToNextPuzzle(routeContext, puzzleIndex),
         onOpenSettings: () => _openSettings(context),
         gamesCount: _gamesCount,
         puzzleCount: _puzzles.length,
         attemptCount: _puzzleResults.length,
         correctCount: _puzzleResults.values.where((value) => value).length,
         stats: _stats,
+        isPreparingNext: _isBuffering,
       ),
     );
   }
 
   void _openPuzzle(BuildContext context, int puzzleIndex) {
+    unawaited(_prefetchMorePuzzles(currentIndex: puzzleIndex));
     Navigator.of(context).push(_buildPuzzleRoute(context, puzzleIndex));
   }
 
@@ -230,7 +343,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Generate a fresh set of puzzles from your recent Chess.com games and jump straight into the first challenge.',
+              'Your first puzzle appears automatically, and the next ones load quietly while you solve.',
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -240,18 +353,6 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
                 Chip(
                   avatar: const Icon(Icons.person, size: 18),
                   label: Text(username.isEmpty ? 'No username set' : username),
-                ),
-                Chip(
-                  avatar: const Icon(Icons.history, size: 18),
-                  label: Text('${_maxGames.round()} games'),
-                ),
-                Chip(
-                  avatar: const Icon(Icons.extension, size: 18),
-                  label: Text('${_maxPuzzles.round()} puzzles'),
-                ),
-                Chip(
-                  avatar: const Icon(Icons.analytics, size: 18),
-                  label: Text('Depth ${_analysisDepth.round()}'),
                 ),
                 Chip(
                   avatar: const Icon(Icons.speed, size: 18),
@@ -279,15 +380,22 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
         color: Colors.red.shade50,
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Text(
-            _errorMessage!,
-            style: TextStyle(color: Colors.red.shade900),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _errorMessage!,
+                style: TextStyle(color: Colors.red.shade900),
+              ),
+              const SizedBox(height: 8),
+              const Text('Use the gear icon to adjust the username or make the search faster.'),
+            ],
           ),
         ),
       );
     }
 
-    if (_isLoading) {
+    if (_isLoading || !_hasOpenedFirstPuzzle) {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(16),
@@ -301,7 +409,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Analyzing recent games and preparing your first puzzle...',
+                  'Preparing your first puzzle and quietly lining up the next ones...',
                 ),
               ),
             ],
@@ -310,19 +418,6 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       );
     }
 
-    if (_puzzles.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text(
-            'No puzzle set loaded yet. Use Create puzzles to begin.',
-          ),
-        ),
-      );
-    }
-
-    final solved = _puzzleResults.values.where((value) => value).length;
-
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -330,15 +425,13 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Latest session',
+              'Training is live',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
-              'Loaded ${_puzzles.length} puzzle${_puzzles.length == 1 ? '' : 's'} from $_gamesCount game${_gamesCount == 1 ? '' : 's'}.',
+              _isBuffering ? 'Lining up your next puzzle in the background.' : 'Your next puzzle will be ready when you are.',
             ),
-            const SizedBox(height: 4),
-            Text('Solved: $solved/${_puzzleResults.length} attempts'),
           ],
         ),
       ),
@@ -369,33 +462,11 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
                 _buildStatusCard(context),
                 const SizedBox(height: 16),
                 _buildFeedbackCard(context),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: _isLoading ? null : _generatePuzzles,
-                  icon: _isLoading
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.bolt),
-                  label: Text(
-                    _isLoading ? 'Analyzing...' : 'Create puzzles',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _isLoading ? 'This can take around 10–30 seconds.' : 'Use the gear icon anytime to adjust your settings.',
+                const SizedBox(height: 12),
+                const Text(
+                  'Use the gear icon anytime to update your training settings.',
                   textAlign: TextAlign.center,
                 ),
-                if (_puzzles.isNotEmpty && !_isLoading) ...[
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () => _openPuzzle(context, 0),
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Resume latest set'),
-                  ),
-                ],
               ],
             ),
           ),

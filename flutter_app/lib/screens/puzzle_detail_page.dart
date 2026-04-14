@@ -19,6 +19,7 @@ class PuzzleDetailPage extends StatefulWidget {
     this.attemptCount = 0,
     this.correctCount = 0,
     this.stats,
+    this.isPreparingNext = false,
   });
 
   final int index;
@@ -32,6 +33,7 @@ class PuzzleDetailPage extends StatefulWidget {
   final int attemptCount;
   final int correctCount;
   final Map<String, dynamic>? stats;
+  final bool isPreparingNext;
 
   @override
   State<PuzzleDetailPage> createState() => _PuzzleDetailPageState();
@@ -155,9 +157,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
                 children: [
                   _SnapshotPill(label: 'Score', value: '${widget.correctCount}/${widget.attemptCount}'),
                   const SizedBox(width: 8),
-                  _SnapshotPill(label: 'Loaded', value: '${widget.puzzleCount}'),
-                  const SizedBox(width: 8),
-                  _SnapshotPill(label: 'Games', value: '${widget.gamesCount}'),
+                  _SnapshotPill(label: 'Next', value: widget.isPreparingNext ? 'Loading' : 'Ready'),
                   const SizedBox(width: 8),
                   _SnapshotPill(label: 'Checked', value: positions),
                 ],
@@ -306,7 +306,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Puzzle ${widget.index}'),
+        title: const Text('Your move'),
         toolbarHeight: 60,
         actions: [
           if (widget.onOpenSettings != null)

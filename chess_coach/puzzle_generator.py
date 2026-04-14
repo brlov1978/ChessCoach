@@ -226,11 +226,17 @@ def generate_puzzles(
 
     primary_puzzles: list[PuzzleCandidate] = []
     fallback_puzzles: list[PuzzleCandidate] = []
+    soft_fallback_puzzles: list[PuzzleCandidate] = []
     seen_fens: set[str] = set()
     positions_checked = 0
     deadline = time.perf_counter() + max(8.0, time_budget_seconds)
     max_positions_per_game = max(2, min(4, max_puzzles))
     difficulty_rules = _difficulty_thresholds(difficulty_level)
+    relaxed_rules = {
+        "min_strength": max(90, difficulty_rules["min_strength"] - 100),
+        "min_gap": max(15, difficulty_rules["min_gap"] - 60),
+        "min_unplayed": max(160, difficulty_rules["min_unplayed"] - 160),
+    }
 
     try:
         for game_data in games:
@@ -287,15 +293,8 @@ def generate_puzzles(
                 mate_in = best.get("mate")
                 gap = _score_gap(lines)
 
-                if mate_in is None and strength_score < difficulty_rules["min_strength"]:
-                    continue
-                if mate_in is None and gap < difficulty_rules["min_gap"] and strength_score < difficulty_rules["min_unplayed"]:
-                    continue
-
                 next_move = moves[ply_index + 1] if ply_index + 1 < len(moves) else None
                 played_best_move = next_move == best["move"] if next_move else False
-                if not played_best_move and mate_in is None and strength_score < difficulty_rules["min_unplayed"]:
-                    continue
 
                 fen = board.fen()
                 if fen in seen_fens:
@@ -330,14 +329,30 @@ def generate_puzzles(
                     reason=reason,
                 )
 
-                if not added_for_game:
-                    primary_puzzles.append(candidate)
-                    added_for_game = True
+                is_strong_candidate = True
+                if mate_in is None and strength_score < difficulty_rules["min_strength"]:
+                    is_strong_candidate = False
+                if mate_in is None and gap < difficulty_rules["min_gap"] and strength_score < difficulty_rules["min_unplayed"]:
+                    is_strong_candidate = False
+                if not played_best_move and mate_in is None and strength_score < difficulty_rules["min_unplayed"]:
+                    is_strong_candidate = False
 
-                    if len(primary_puzzles) >= max_puzzles:
-                        break
-                else:
-                    fallback_puzzles.append(candidate)
+                if is_strong_candidate:
+                    if not added_for_game:
+                        primary_puzzles.append(candidate)
+                        added_for_game = True
+
+                        if len(primary_puzzles) >= max_puzzles:
+                            break
+                    else:
+                        fallback_puzzles.append(candidate)
+                elif (
+                    mate_in is not None
+                    or strength_score >= relaxed_rules["min_strength"]
+                    or gap >= relaxed_rules["min_gap"]
+                    or played_best_move
+                ):
+                    soft_fallback_puzzles.append(candidate)
     finally:
         if created_evaluator:
             evaluator.close()
@@ -345,6 +360,15 @@ def generate_puzzles(
     puzzles = primary_puzzles[:max_puzzles]
     if len(puzzles) < max_puzzles:
         puzzles.extend(fallback_puzzles[: max_puzzles - len(puzzles)])
+    if len(puzzles) < max_puzzles:
+        used_fens = {puzzle.fen for puzzle in puzzles}
+        for candidate in soft_fallback_puzzles:
+            if candidate.fen in used_fens:
+                continue
+            puzzles.append(candidate)
+            used_fens.add(candidate.fen)
+            if len(puzzles) >= max_puzzles:
+                break
 
     stats = {
         "games_scanned": len(games),

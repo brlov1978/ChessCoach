@@ -7,12 +7,13 @@ import 'package:flutter_app/screens/puzzle_detail_page.dart';
 import 'package:flutter_app/screens/settings_page.dart';
 
 void main() {
-  testWidgets('Chess Coach home screen renders quick start UI', (WidgetTester tester) async {
+  testWidgets('Chess Coach home screen renders seamless loading UI', (WidgetTester tester) async {
     await tester.pumpWidget(const ChessCoachApp());
 
-    expect(find.text('Create puzzles'), findsOneWidget);
     expect(find.byIcon(Icons.settings), findsOneWidget);
     expect(find.textContaining('Ready to train'), findsOneWidget);
+    expect(find.textContaining('Preparing your first puzzle'), findsOneWidget);
+    expect(find.text('Create puzzles'), findsNothing);
   });
 
   testWidgets('Settings page renders speed and difficulty options', (WidgetTester tester) async {
