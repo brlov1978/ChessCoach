@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:flutter_app/utils/chess_board_utils.dart';
 
@@ -18,19 +19,13 @@ class ChessBoardView extends StatelessWidget {
   final String? selectedSquare;
   final String? highlightSquare;
 
-  static const Map<String, String> _pieceGlyphs = {
-    'K': '♚',
-    'Q': '♛',
-    'R': '♜',
-    'B': '♝',
-    'N': '♞',
-    'P': '♟',
-    'k': '♚',
-    'q': '♛',
-    'r': '♜',
-    'b': '♝',
-    'n': '♞',
-    'p': '♟',
+  static const Map<String, String> _pieceAssets = {
+    'k': 'assets/pieces/king.svg',
+    'q': 'assets/pieces/queen.svg',
+    'r': 'assets/pieces/rook.svg',
+    'b': 'assets/pieces/bishop.svg',
+    'n': 'assets/pieces/knight.svg',
+    'p': 'assets/pieces/pawn.svg',
   };
 
   Widget _buildPieceWidget(String piece, {double size = 34}) {
@@ -39,15 +34,15 @@ class ChessBoardView extends StatelessWidget {
     }
 
     final isWhite = piece == piece.toUpperCase();
-    final normalizedPiece = piece.toUpperCase();
+    final normalizedPiece = piece.toLowerCase();
     final sizeFactor = switch (normalizedPiece) {
-      'P' => 0.92,
-      'R' => 1.00,
-      'N' => 1.03,
-      'B' => 1.03,
-      'Q' => 1.05,
-      'K' => 1.06,
-      _ => 1.0,
+      'p' => 0.82,
+      'r' => 0.92,
+      'n' => 0.96,
+      'b' => 0.96,
+      'q' => 0.99,
+      'k' => 1.00,
+      _ => 0.94,
     };
 
     return SizedBox(
@@ -55,22 +50,15 @@ class ChessBoardView extends StatelessWidget {
       height: size,
       child: Center(
         child: Transform.translate(
-          offset: Offset(0, size * 0.06),
-          child: Text(
-            _pieceGlyphs[piece] ?? '',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: size * sizeFactor,
-              height: 1,
-              color:
-                  isWhite ? const Color(0xFFF8F8F6) : const Color(0xFF202020),
-              shadows: [
-                Shadow(
-                  color: isWhite ? Colors.black45 : Colors.white38,
-                  offset: const Offset(0.7, 0.8),
-                  blurRadius: 1.0,
-                ),
-              ],
+          offset: Offset(0, size * 0.04),
+          child: SvgPicture.asset(
+            _pieceAssets[normalizedPiece]!,
+            width: size * sizeFactor,
+            height: size * sizeFactor,
+            fit: BoxFit.contain,
+            colorFilter: ColorFilter.mode(
+              isWhite ? const Color(0xFFF8F8F6) : const Color(0xFF202020),
+              BlendMode.srcIn,
             ),
           ),
         ),
