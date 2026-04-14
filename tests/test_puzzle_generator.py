@@ -55,6 +55,22 @@ class AlwaysTacticalEvaluator:
         return None
 
 
+class SoftOpportunityEvaluator:
+    source = "fake-soft"
+
+    def analyze(self, board: chess.Board):
+        legal_moves = list(board.legal_moves)
+        best_move = legal_moves[0]
+        second_move = legal_moves[1] if len(legal_moves) > 1 else legal_moves[0]
+        return [
+            {"move": best_move, "score": 120, "mate": None},
+            {"move": second_move, "score": 90, "mate": None},
+        ]
+
+    def close(self):
+        return None
+
+
 def test_generate_puzzles_returns_candidate_from_game():
     sample_game = {
         "white": {"username": "CoachUser"},
@@ -197,3 +213,34 @@ def test_generate_puzzles_allows_second_puzzle_if_not_enough_games():
 
     assert len(puzzles) == 2
     assert {puzzle.source_url for puzzle in puzzles} == {"https://www.chess.com/game/live/300"}
+
+
+def test_generate_puzzles_returns_soft_fallback_when_strong_candidates_are_sparse():
+    sample_game = {
+        "white": {"username": "CoachUser"},
+        "black": {"username": "OpponentA"},
+        "url": "https://www.chess.com/game/live/400",
+        "pgn": """
+[Event "Live Chess"]
+[Site "Chess.com"]
+[Date "2026.04.14"]
+[Round "-"]
+[White "CoachUser"]
+[Black "OpponentA"]
+[Result "1-0"]
+[Opening "Italian Game"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Bc5 4. d3 Nf6 5. Nc3 d6 6. O-O h6 1-0
+""",
+    }
+
+    puzzles, stats = generate_puzzles(
+        [sample_game],
+        username="CoachUser",
+        max_puzzles=1,
+        evaluator=SoftOpportunityEvaluator(),
+        difficulty_level="medium",
+    )
+
+    assert len(puzzles) == 1
+    assert stats["engine_source"] == "fake-soft"
