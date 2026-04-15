@@ -63,8 +63,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
 
     if (oldWidget.index != widget.index ||
         oldWidget.puzzle.fen != widget.puzzle.fen ||
-        oldWidget.puzzle.bestMoveUci != widget.puzzle.bestMoveUci ||
-        oldWidget.initialResult != widget.initialResult) {
+        oldWidget.puzzle.bestMoveUci != widget.puzzle.bestMoveUci) {
       _resetPuzzle();
     }
   }
