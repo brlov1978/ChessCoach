@@ -20,12 +20,12 @@ class ChessBoardView extends StatelessWidget {
   final String? highlightSquare;
 
   static const Map<String, String> _pieceAssets = {
-    'k': 'assets/pieces_classic/king.svg',
-    'q': 'assets/pieces_classic/queen.svg',
-    'r': 'assets/pieces_classic/rook.svg',
-    'b': 'assets/pieces_classic/bishop.svg',
-    'n': 'assets/pieces_classic/knight.svg',
-    'p': 'assets/pieces_classic/pawn.svg',
+    'k': 'assets/pieces/king.svg',
+    'q': 'assets/pieces/queen.svg',
+    'r': 'assets/pieces/rook.svg',
+    'b': 'assets/pieces/bishop.svg',
+    'n': 'assets/pieces/knight.svg',
+    'p': 'assets/pieces/pawn.svg',
   };
 
   Widget _buildPieceWidget(String piece, {double size = 34}) {
