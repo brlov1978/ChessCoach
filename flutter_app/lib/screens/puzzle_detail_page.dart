@@ -97,7 +97,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
         _currentFen = applyMoveToFen(_currentFen, expectedMove);
         _celebrationCount += 1;
       } else {
-        _currentFen = applyMoveToFen(_currentFen, attemptedMove);
+        _currentFen = widget.puzzle.fen;
       }
     });
   }

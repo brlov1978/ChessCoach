@@ -5,6 +5,7 @@ import 'package:flutter_app/main.dart';
 import 'package:flutter_app/models/puzzle_data.dart';
 import 'package:flutter_app/screens/puzzle_detail_page.dart';
 import 'package:flutter_app/screens/settings_page.dart';
+import 'package:flutter_app/widgets/chess_board_view.dart';
 
 void main() {
   testWidgets('Chess Coach opens directly into training flow', (WidgetTester tester) async {
@@ -173,6 +174,43 @@ void main() {
       ),
     );
 
+    expect(find.text('Try again'), findsWidgets);
+  });
+
+  testWidgets('Wrong move resets board to original position', (WidgetTester tester) async {
+    const puzzle = PuzzleData(
+      title: 'Find the best move for White',
+      fen: 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 2',
+      bestMoveUci: 'f3e5',
+      bestMoveSan: 'Nxe5',
+      actualMoveSan: 'Nxe5',
+      evaluationCp: 250,
+      mateIn: null,
+      sourceUrl: 'https://example.com',
+      opening: 'Italian Game',
+      opponent: 'Opponent',
+      playerColor: 'White',
+      reason: 'A tactical shot wins material.',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PuzzleDetailPage(
+          index: 1,
+          puzzle: puzzle,
+          onAttempt: (_) {},
+        ),
+      ),
+    );
+
+    final boardBefore = tester.widget<ChessBoardView>(find.byType(ChessBoardView));
+    expect(boardBefore.fen, puzzle.fen);
+
+    boardBefore.onMoveAttempt('a2', 'a3');
+    await tester.pump();
+
+    final boardAfter = tester.widget<ChessBoardView>(find.byType(ChessBoardView));
+    expect(boardAfter.fen, puzzle.fen);
     expect(find.text('Try again'), findsWidgets);
   });
 

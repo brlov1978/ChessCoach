@@ -1,6 +1,7 @@
 import chess
+import pytest
 
-from chess_coach.puzzle_generator import generate_puzzles
+from chess_coach.puzzle_generator import PositionEvaluator, generate_puzzles
 
 
 class FakeEvaluator:
@@ -69,6 +70,30 @@ class SoftOpportunityEvaluator:
 
     def close(self):
         return None
+
+
+def test_position_evaluator_requires_local_engine_by_default(monkeypatch):
+    monkeypatch.setattr(PositionEvaluator, "_discover_stockfish", lambda self, explicit_path=None: None)
+
+    with pytest.raises(RuntimeError, match="Stockfish was not found"):
+        PositionEvaluator()
+
+
+def test_position_evaluator_can_use_cloud_when_enabled(monkeypatch):
+    monkeypatch.setattr(PositionEvaluator, "_discover_stockfish", lambda self, explicit_path=None: None)
+    monkeypatch.setattr(
+        PositionEvaluator,
+        "_analyze_cloud",
+        lambda self, board: [{"move": chess.Move.from_uci("e2e4"), "score": 25, "mate": None}],
+    )
+
+    evaluator = PositionEvaluator(allow_cloud_fallback=True)
+    board = chess.Board()
+    lines = evaluator.analyze(board)
+
+    assert evaluator.source == "Lichess Cloud Eval"
+    assert lines[0]["move"].uci() == "e2e4"
+    assert lines[0]["score"] == 25
 
 
 def test_generate_puzzles_returns_candidate_from_game():

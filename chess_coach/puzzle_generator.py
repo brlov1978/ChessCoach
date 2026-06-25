@@ -34,25 +34,44 @@ class PuzzleCandidate:
 
 
 class PositionEvaluator:
-    def __init__(self, depth: int = 12, multipv: int = 2) -> None:
+    def __init__(
+        self,
+        depth: int = 12,
+        multipv: int = 2,
+        *,
+        allow_cloud_fallback: bool = False,
+        stockfish_path: str | None = None,
+    ) -> None:
         self.depth = depth
         self.multipv = multipv
+        self.allow_cloud_fallback = allow_cloud_fallback
         self.session = requests.Session()
         self.cache: dict[str, list[dict[str, Any]]] = {}
-        self.engine_path = self._discover_stockfish()
+        self.engine_path = self._discover_stockfish(stockfish_path)
         self.engine: chess.engine.SimpleEngine | None = None
-        self.source = "Lichess Cloud Eval"
+        self.source = ""
 
         if self.engine_path:
             self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
             self.source = f"Stockfish ({self.engine_path})"
+            return
+
+        if self.allow_cloud_fallback:
+            self.source = "Lichess Cloud Eval"
+            return
+
+        raise RuntimeError(
+            "Stockfish was not found. Set STOCKFISH_PATH or install stockfish on PATH. "
+            "To allow network fallback, set CHESS_ALLOW_CLOUD_FALLBACK=1."
+        )
 
     def close(self) -> None:
         if self.engine is not None:
             self.engine.quit()
 
-    def _discover_stockfish(self) -> str | None:
+    def _discover_stockfish(self, explicit_path: str | None = None) -> str | None:
         candidates = [
+            explicit_path,
             os.environ.get("STOCKFISH_PATH"),
             shutil.which("stockfish"),
             shutil.which("stockfish.exe"),
@@ -72,7 +91,7 @@ class PositionEvaluator:
         if self.engine is not None:
             lines = self._analyze_local(board)
         else:
-            lines = self._analyze_cloud(board)
+            lines = self._analyze_cloud(board) if self.allow_cloud_fallback else []
 
         self.cache[fen] = lines
         return lines
@@ -220,9 +239,16 @@ def generate_puzzles(
     time_budget_seconds: float = 20.0,
     difficulty_level: str = "medium",
     multipv: int = 2,
+    allow_cloud_fallback: bool = False,
+    stockfish_path: str | None = None,
 ) -> tuple[list[PuzzleCandidate], dict[str, Any]]:
     created_evaluator = evaluator is None
-    evaluator = evaluator or PositionEvaluator(depth=analysis_depth, multipv=multipv)
+    evaluator = evaluator or PositionEvaluator(
+        depth=analysis_depth,
+        multipv=multipv,
+        allow_cloud_fallback=allow_cloud_fallback,
+        stockfish_path=stockfish_path,
+    )
 
     primary_puzzles: list[PuzzleCandidate] = []
     fallback_puzzles: list[PuzzleCandidate] = []

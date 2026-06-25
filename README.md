@@ -10,7 +10,7 @@ Chess Coach now uses:
 - Fetches recent public games from the Chess.com API
 - Parses PGN records with `python-chess`
 - Finds tactical puzzle candidates from your real games
-- Uses local Stockfish when available, with a cloud-eval fallback
+- Uses a local Stockfish engine by default for faster analysis
 - Provides a Flutter UI for entering usernames and reviewing puzzles
 
 ## Backend setup
@@ -71,5 +71,7 @@ Once deployed, the site and API will share the same URL, so the frontend should 
 ## Notes
 
 - Only public Chess.com games can be downloaded.
-- If Stockfish is installed and available on your PATH, the analysis will be stronger.
+- The backend now requires a local Stockfish binary by default.
+- Set `STOCKFISH_PATH` to the binary path if it is not on your PATH.
+- Optional: set `CHESS_ALLOW_CLOUD_FALLBACK=1` to allow Lichess cloud eval when no local engine is found.
 - The first run may take a little time while positions are evaluated.

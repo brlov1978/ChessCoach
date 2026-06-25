@@ -33,6 +33,20 @@ def _coerce_choice(value: Any, default: str, *, allowed: set[str]) -> str:
     return parsed if parsed in allowed else default
 
 
+def _coerce_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+
+    parsed = str(value).strip().lower()
+    if parsed in {"1", "true", "yes", "on"}:
+        return True
+    if parsed in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def _serialize_puzzle(puzzle: Any) -> dict[str, Any]:
     if hasattr(puzzle, "to_dict"):
         return puzzle.to_dict()
@@ -95,6 +109,13 @@ def create_app() -> Flask:
             min_value=10,
             max_value=30,
         )
+        allow_cloud_fallback = _coerce_bool(
+            payload.get("allow_cloud_fallback"),
+            _coerce_bool(os.environ.get("CHESS_ALLOW_CLOUD_FALLBACK"), False),
+        )
+        stockfish_path = str(
+            payload.get("stockfish_path") or os.environ.get("STOCKFISH_PATH") or ""
+        ).strip() or None
 
         speed_profiles = {
             "fast": {"max_games_cap": 20, "max_depth_cap": 10, "time_cap": 12, "multipv": 1},
@@ -107,15 +128,20 @@ def create_app() -> Flask:
         time_budget_seconds = min(time_budget_seconds, profile["time_cap"])
 
         games = fetch_recent_games(username, max_games=max_games)
-        puzzles, stats = generate_puzzles(
-            games,
-            username=username,
-            max_puzzles=max_puzzles,
-            analysis_depth=analysis_depth,
-            difficulty_level=difficulty,
-            time_budget_seconds=time_budget_seconds,
-            multipv=profile["multipv"],
-        )
+        try:
+            puzzles, stats = generate_puzzles(
+                games,
+                username=username,
+                max_puzzles=max_puzzles,
+                analysis_depth=analysis_depth,
+                difficulty_level=difficulty,
+                time_budget_seconds=time_budget_seconds,
+                multipv=profile["multipv"],
+                allow_cloud_fallback=allow_cloud_fallback,
+                stockfish_path=stockfish_path,
+            )
+        except RuntimeError as error:
+            return jsonify({"error": str(error)}), 503
 
         return jsonify(
             {

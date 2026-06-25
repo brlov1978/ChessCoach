@@ -35,12 +35,16 @@ def test_generate_puzzles_endpoint_returns_json(monkeypatch):
         difficulty_level="medium",
         time_budget_seconds=20.0,
         multipv=2,
+        allow_cloud_fallback=False,
+        stockfish_path=None,
     ):
         captured["max_puzzles"] = max_puzzles
         captured["analysis_depth"] = analysis_depth
         captured["difficulty_level"] = difficulty_level
         captured["time_budget_seconds"] = time_budget_seconds
         captured["multipv"] = multipv
+        captured["allow_cloud_fallback"] = allow_cloud_fallback
+        captured["stockfish_path"] = stockfish_path
         return sample_puzzles, {"games_scanned": 1, "positions_checked": 4, "engine_source": "fake"}
 
     monkeypatch.setattr("app.fetch_recent_games", fake_fetch_recent_games)
@@ -71,3 +75,5 @@ def test_generate_puzzles_endpoint_returns_json(monkeypatch):
     assert captured["difficulty_level"] == "hard"
     assert captured["time_budget_seconds"] == 12
     assert captured["multipv"] == 1
+    assert captured["allow_cloud_fallback"] is False
+    assert captured["stockfish_path"] is None
