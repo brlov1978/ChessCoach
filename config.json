@@ -1,0 +1,5 @@
+{
+  "database_path": "chess_coach.sqlite3",
+  "stockfish_path": "C:\\code\\chess_coach\\stockfish\\stockfish-windows-x86-64-avx2.exe",
+  "allow_cloud_fallback": false
+}

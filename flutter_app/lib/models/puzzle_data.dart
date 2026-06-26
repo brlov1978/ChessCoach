@@ -12,6 +12,8 @@ class PuzzleData {
     required this.opponent,
     required this.playerColor,
     required this.reason,
+    this.repeatCount,
+    this.repeatExamples = const [],
   });
 
   final String title;
@@ -26,6 +28,8 @@ class PuzzleData {
   final String opponent;
   final String playerColor;
   final String reason;
+  final int? repeatCount;
+  final List<MistakeOccurrence> repeatExamples;
 
   factory PuzzleData.fromJson(Map<String, dynamic> json) {
     return PuzzleData(
@@ -41,6 +45,30 @@ class PuzzleData {
       opponent: json['opponent']?.toString() ?? 'Unknown',
       playerColor: json['player_color']?.toString() ?? 'White',
       reason: json['reason']?.toString() ?? '',
+      repeatCount: (json['repeat_count'] as num?)?.toInt(),
+      repeatExamples: (json['repeat_examples'] as List<dynamic>? ?? const <dynamic>[])
+          .map((item) => MistakeOccurrence.fromJson(Map<String, dynamic>.from(item as Map)))
+          .toList(),
+    );
+  }
+}
+
+class MistakeOccurrence {
+  const MistakeOccurrence({
+    required this.url,
+    required this.date,
+    required this.format,
+  });
+
+  final String url;
+  final String date;
+  final String format;
+
+  factory MistakeOccurrence.fromJson(Map<String, dynamic> json) {
+    return MistakeOccurrence(
+      url: json['url']?.toString() ?? '',
+      date: json['date']?.toString() ?? 'Unknown date',
+      format: json['format']?.toString() ?? 'unknown',
     );
   }
 }

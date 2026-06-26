@@ -28,6 +28,8 @@ class PuzzleCandidate:
     opponent: str
     player_color: str
     reason: str
+    repeat_count: int | None = None
+    repeat_examples: list[dict[str, Any]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -61,8 +63,8 @@ class PositionEvaluator:
             return
 
         raise RuntimeError(
-            "Stockfish was not found. Set STOCKFISH_PATH or install stockfish on PATH. "
-            "To allow network fallback, set CHESS_ALLOW_CLOUD_FALLBACK=1."
+            "Stockfish was not found. Set stockfish_path in config.json or install stockfish on PATH. "
+            "To allow network fallback, set allow_cloud_fallback in config.json."
         )
 
     def close(self) -> None:
@@ -72,7 +74,6 @@ class PositionEvaluator:
     def _discover_stockfish(self, explicit_path: str | None = None) -> str | None:
         candidates = [
             explicit_path,
-            os.environ.get("STOCKFISH_PATH"),
             shutil.which("stockfish"),
             shutil.which("stockfish.exe"),
             os.path.join(os.getcwd(), "bin", "stockfish", "stockfish.exe"),

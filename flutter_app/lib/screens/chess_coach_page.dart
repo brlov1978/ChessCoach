@@ -19,29 +19,38 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
   late final TextEditingController _backendUrlController;
   late final TextEditingController _usernameController;
 
-  double _maxGames = 10;
-  double _maxPuzzles = 5;
+  double _monthsBack = 12;
+  double _maxGames = 500;
   double _analysisDepth = 10;
-  String _speedMode = 'balanced';
-  String _difficulty = 'medium';
-  double _timeCapSeconds = 20;
+  double _mistakeThresholdCp = 90;
+
   bool _isLoading = false;
-  bool _isBuffering = false;
   bool _hasStartedAutoLoad = false;
   bool _hasOpenedFirstPuzzle = false;
+  bool _isAnalyzing = false;
+  int _analysisProgress = 0;
+  String _analysisStatus = 'idle';
+  String? _activeJobId;
+  Timer? _analysisPollTimer;
+  bool _isPollingJob = false;
+
   String? _errorMessage;
   List<PuzzleData> _puzzles = const [];
   Map<String, dynamic>? _stats;
   int _gamesCount = 0;
   int _currentPuzzleIndex = 0;
-  Future<void>? _bufferingTask;
   final Map<int, bool> _puzzleResults = <int, bool>{};
+  final Map<int, Set<String>> _wrongMovesByPuzzle = <int, Set<String>>{};
+  final Set<int> _roundSolvedIndexes = <int>{};
+  int _starsCount = 0;
+  int _facepalmCount = 0;
+  int _sadCount = 0;
 
   @override
   void initState() {
     super.initState();
     _backendUrlController = TextEditingController(text: _defaultBackendUrl());
-    _usernameController = TextEditingController(text: 'hikaru');
+    _usernameController = TextEditingController(text: 'brlov1978');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -50,45 +59,28 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     });
   }
 
+  @override
+  void dispose() {
+    _analysisPollTimer?.cancel();
+    _backendUrlController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
   String _defaultBackendUrl() {
     final host = Uri.base.host.toLowerCase();
     final isLocalHost = host.isEmpty || host == 'localhost' || host == '127.0.0.1';
     return isLocalHost ? 'http://127.0.0.1:8000' : Uri.base.origin;
   }
 
-  String _displayLabel(String value) {
-    if (value.isEmpty) {
-      return value;
-    }
-    return value[0].toUpperCase() + value.substring(1);
-  }
-
-  int _targetBufferSize() {
-    return _maxPuzzles.round().clamp(2, 12);
-  }
-
-  int _initialBatchSize() {
-    final target = _targetBufferSize();
-    return target >= 3 ? 3 : target;
-  }
-
-  @override
-  void dispose() {
-    _backendUrlController.dispose();
-    _usernameController.dispose();
-    super.dispose();
-  }
-
   TrainingSettings _currentSettings() {
     return TrainingSettings(
       backendUrl: _backendUrlController.text.trim(),
       username: _usernameController.text.trim(),
+      monthsBack: _monthsBack,
       maxGames: _maxGames,
-      maxPuzzles: _maxPuzzles,
       analysisDepth: _analysisDepth,
-      speedMode: _speedMode,
-      difficulty: _difficulty,
-      timeCapSeconds: _timeCapSeconds,
+      mistakeThresholdCp: _mistakeThresholdCp,
     );
   }
 
@@ -106,16 +98,14 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     setState(() {
       _backendUrlController.text = settings.backendUrl;
       _usernameController.text = settings.username;
+      _monthsBack = settings.monthsBack;
       _maxGames = settings.maxGames;
-      _maxPuzzles = settings.maxPuzzles;
       _analysisDepth = settings.analysisDepth;
-      _speedMode = settings.speedMode;
-      _difficulty = settings.difficulty;
-      _timeCapSeconds = settings.timeCapSeconds;
+      _mistakeThresholdCp = settings.mistakeThresholdCp;
       _errorMessage = null;
     });
 
-    unawaited(_startSeamlessSession(force: true));
+    await _startBackgroundAnalysis();
   }
 
   Future<void> _startSeamlessSession({bool force = false}) async {
@@ -126,19 +116,12 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
     _hasStartedAutoLoad = true;
     _hasOpenedFirstPuzzle = false;
 
-    await _generatePuzzles(
-      openFirstPuzzle: true,
-      requestedBatchSize: _initialBatchSize(),
-      resetSession: true,
-      background: false,
-    );
+    await _loadStoredPuzzles(openFirstPuzzle: true, resetSession: true);
   }
 
-  Future<void> _generatePuzzles({
+  Future<void> _loadStoredPuzzles({
     required bool openFirstPuzzle,
-    required int requestedBatchSize,
     required bool resetSession,
-    required bool background,
   }) async {
     final baseUrl = _backendUrlController.text.trim().replaceAll(RegExp(r'/$'), '');
     final username = _usernameController.text.trim();
@@ -150,294 +133,325 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
       return;
     }
 
-    if (background && (_isLoading || _isBuffering)) {
-      return;
-    }
-    if (!background && _isLoading) {
+    if (_isLoading) {
       return;
     }
 
     setState(() {
-      if (background) {
-        _isBuffering = true;
-      } else {
-        _isLoading = true;
-        _errorMessage = null;
-      }
-
+      _isLoading = true;
+      _errorMessage = null;
       if (resetSession) {
         _puzzles = const [];
         _puzzleResults.clear();
+        _wrongMovesByPuzzle.clear();
+        _roundSolvedIndexes.clear();
+        _starsCount = 0;
+        _facepalmCount = 0;
+        _sadCount = 0;
         _stats = null;
         _gamesCount = 0;
         _currentPuzzleIndex = 0;
-        _bufferingTask = null;
       }
     });
 
     try {
       final response = await http
           .post(
-            Uri.parse('$baseUrl/api/puzzles'),
+            Uri.parse('$baseUrl/api/puzzles/mistakes'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
               'username': username,
-              'max_games': _maxGames.round(),
-              'max_puzzles': requestedBatchSize,
-              'analysis_depth': _analysisDepth.round(),
-              'speed_mode': _speedMode,
-              'difficulty': _difficulty,
-              'time_budget_seconds': _timeCapSeconds.round(),
             }),
           )
           .timeout(const Duration(seconds: 45));
 
       final dynamic decoded = jsonDecode(response.body);
-      final Map<String, dynamic> payload = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
-
+      final payload = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
       if (response.statusCode != 200) {
         throw Exception(payload['error'] ?? 'Request failed with status ${response.statusCode}.');
       }
 
-      final puzzleList = (payload['puzzles'] as List<dynamic>? ?? <dynamic>[]).map((item) => PuzzleData.fromJson(Map<String, dynamic>.from(item as Map))).toList();
+      final puzzleList = (payload['puzzles'] as List<dynamic>? ?? <dynamic>[])
+          .map((item) => PuzzleData.fromJson(Map<String, dynamic>.from(item as Map)))
+          .toList();
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        final merged = resetSession ? <PuzzleData>[] : <PuzzleData>[..._puzzles];
-        final seenFens = merged.map((puzzle) => puzzle.fen).toSet();
-
-        for (final puzzle in puzzleList) {
-          if (seenFens.add(puzzle.fen)) {
-            merged.add(puzzle);
-          }
-        }
-
-        _puzzles = merged;
+        _puzzles = puzzleList;
         _stats = Map<String, dynamic>.from(payload['stats'] as Map? ?? <String, dynamic>{});
-        _gamesCount = payload['games_count'] as int? ?? 0;
+        _gamesCount = (_stats?['games_processed'] as int?) ?? 0;
 
         if (openFirstPuzzle && _puzzles.isNotEmpty) {
           _hasOpenedFirstPuzzle = true;
           _currentPuzzleIndex = 0;
         }
 
-        if (!background && _puzzles.isEmpty) {
-          _errorMessage = 'No puzzles were found right now. Open settings to try different training options.';
+        if (_puzzles.isEmpty && !_isAnalyzing) {
+          _errorMessage = 'No stored puzzles yet. Open settings to run background analysis.';
         }
       });
-
-      if (openFirstPuzzle && _puzzles.isNotEmpty && mounted) {
-        unawaited(_prefetchMorePuzzles(currentIndex: _currentPuzzleIndex));
-      }
     } on TimeoutException {
       if (!mounted) {
         return;
       }
-
-      if (!background) {
+      setState(() {
+        _errorMessage = 'The request timed out while loading stored puzzles.';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = error.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
         setState(() {
-          _errorMessage = 'Still searching for a good puzzle. Try Fast mode or a shorter time cap.';
+          _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _startBackgroundAnalysis() async {
+    final baseUrl = _backendUrlController.text.trim().replaceAll(RegExp(r'/$'), '');
+    final username = _usernameController.text.trim();
+
+    if (baseUrl.isEmpty || username.isEmpty) {
+      setState(() {
+        _errorMessage = 'Open settings and enter both a backend URL and a Chess.com username.';
+      });
+      return;
+    }
+
+    _analysisPollTimer?.cancel();
+
+    setState(() {
+      _isAnalyzing = true;
+      _analysisProgress = 0;
+      _analysisStatus = 'queued';
+      _activeJobId = null;
+      _errorMessage = null;
+      _hasOpenedFirstPuzzle = false;
+      _puzzles = const [];
+      _puzzleResults.clear();
+      _currentPuzzleIndex = 0;
+    });
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/analysis/jobs'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'username': username,
+              'months_back': _monthsBack.round(),
+              'max_games': _maxGames.round(),
+              'analysis_depth': _analysisDepth.round(),
+              'mistake_threshold_cp': _mistakeThresholdCp.round(),
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      final dynamic decoded = jsonDecode(response.body);
+      final payload = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+      if (response.statusCode != 202) {
+        throw Exception(payload['error'] ?? 'Failed to start analysis job.');
+      }
+
+      final jobId = payload['job_id']?.toString() ?? '';
+      if (jobId.isEmpty) {
+        throw Exception('Job id missing from analysis response.');
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _activeJobId = jobId;
+      });
+
+      _analysisPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        unawaited(_pollAnalysisJob(jobId));
+      });
+      await _pollAnalysisJob(jobId);
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      if (!background) {
+      setState(() {
+        _isAnalyzing = false;
+        _analysisStatus = 'failed';
+        _errorMessage = error.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  Future<void> _pollAnalysisJob(String jobId) async {
+    if (_isPollingJob || !mounted) {
+      return;
+    }
+
+    _isPollingJob = true;
+    try {
+      final baseUrl = _backendUrlController.text.trim().replaceAll(RegExp(r'/$'), '');
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/analysis/jobs/$jobId'))
+          .timeout(const Duration(seconds: 20));
+
+      final dynamic decoded = jsonDecode(response.body);
+      final payload = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+
+      if (response.statusCode != 200) {
+        throw Exception(payload['error'] ?? 'Failed to read analysis status.');
+      }
+
+      final status = payload['status']?.toString() ?? 'unknown';
+      final progress = (payload['progress_percent'] as num?)?.toInt() ?? 0;
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _analysisStatus = status;
+        _analysisProgress = progress.clamp(0, 100);
+        _stats = <String, dynamic>{
+          'positions_checked': payload['positions_analyzed'] ?? 0,
+          'games_processed': payload['games_processed'] ?? 0,
+          'mistakes_found': payload['mistakes_found'] ?? 0,
+        };
+      });
+
+      if (status == 'completed') {
+        _analysisPollTimer?.cancel();
+        _analysisPollTimer = null;
+
+        if (mounted) {
+          setState(() {
+            _isAnalyzing = false;
+          });
+        }
+
+        await _loadStoredPuzzles(openFirstPuzzle: true, resetSession: true);
+      } else if (status == 'failed') {
+        _analysisPollTimer?.cancel();
+        _analysisPollTimer = null;
+
+        if (mounted) {
+          setState(() {
+            _isAnalyzing = false;
+            _errorMessage = payload['error']?.toString() ?? 'Background analysis failed.';
+          });
+        }
+      }
+    } catch (error) {
+      if (mounted) {
         setState(() {
+          _isAnalyzing = false;
+          _analysisStatus = 'failed';
           _errorMessage = error.toString().replaceFirst('Exception: ', '');
         });
       }
+      _analysisPollTimer?.cancel();
+      _analysisPollTimer = null;
     } finally {
-      if (mounted) {
-        setState(() {
-          if (background) {
-            _isBuffering = false;
-          } else {
-            _isLoading = false;
-          }
-        });
-      }
+      _isPollingJob = false;
     }
   }
 
-  Future<void> _prefetchMorePuzzles({required int currentIndex}) async {
-    final bufferTarget = _targetBufferSize();
-    final remaining = (_puzzles.length - currentIndex - 1).clamp(0, 9999);
-    final missing = bufferTarget - remaining;
-
-    if (_isLoading || bufferTarget <= 1 || missing <= 0) {
-      return;
-    }
-
-    if (_bufferingTask != null) {
-      await _bufferingTask;
-      return;
-    }
-
-    final task = _generatePuzzles(
-      openFirstPuzzle: false,
-      requestedBatchSize: missing.clamp(2, bufferTarget),
-      resetSession: false,
-      background: true,
-    );
-
-    _bufferingTask = task;
-    try {
-      await task;
-    } finally {
-      _bufferingTask = null;
-    }
-  }
-
-  void _recordAttempt(int puzzleIndex, bool isCorrect) {
+  void _recordAttempt(int puzzleIndex, bool isCorrect, String attemptedMove) {
     setState(() {
-      final previous = _puzzleResults[puzzleIndex];
-      if (previous == null || (previous == false && isCorrect)) {
-        _puzzleResults[puzzleIndex] = isCorrect;
+      if (isCorrect) {
+        final firstSolve = _puzzleResults[puzzleIndex] != true;
+        _puzzleResults[puzzleIndex] = true;
+        if (firstSolve) {
+          _starsCount += 1;
+          _roundSolvedIndexes.add(puzzleIndex);
+        }
+      } else {
+        _puzzleResults.putIfAbsent(puzzleIndex, () => false);
+        final seenMoves = _wrongMovesByPuzzle.putIfAbsent(puzzleIndex, () => <String>{});
+        if (seenMoves.contains(attemptedMove)) {
+          _facepalmCount += 1;
+        } else {
+          seenMoves.add(attemptedMove);
+          _sadCount += 1;
+        }
       }
     });
   }
 
   Future<void> _goToNextPuzzle() async {
-    final immediateNextIndex = _currentPuzzleIndex + 1;
-
-    if (immediateNextIndex < _puzzles.length) {
+    final nextIndex = _currentPuzzleIndex + 1;
+    if (nextIndex < _puzzles.length) {
       setState(() {
-        _currentPuzzleIndex = immediateNextIndex;
+        _currentPuzzleIndex = nextIndex;
       });
-      unawaited(_prefetchMorePuzzles(currentIndex: immediateNextIndex));
       return;
     }
 
-    await _prefetchMorePuzzles(currentIndex: _currentPuzzleIndex);
+    final completedScore = '${_roundSolvedIndexes.length}/${_puzzles.length}';
+    if (_puzzles.isNotEmpty) {
+      setState(() {
+        _currentPuzzleIndex = 0;
+        _roundSolvedIndexes.clear();
+      });
+    }
 
     if (!mounted) {
       return;
     }
 
-    final refreshedNextIndex = _currentPuzzleIndex + 1;
-    if (refreshedNextIndex < _puzzles.length) {
-      setState(() {
-        _currentPuzzleIndex = refreshedNextIndex;
-      });
-      unawaited(_prefetchMorePuzzles(currentIndex: refreshedNextIndex));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Finding your next puzzle...')),
-      );
-    }
-  }
-
-  Widget _buildStatusCard(BuildContext context) {
-    final username = _usernameController.text.trim();
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Ready to train',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Your first puzzle appears automatically, and the next ones load quietly while you solve.',
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Chip(
-                  avatar: const Icon(Icons.person, size: 18),
-                  label: Text(username.isEmpty ? 'No username set' : username),
-                ),
-                Chip(
-                  avatar: const Icon(Icons.speed, size: 18),
-                  label: Text(_displayLabel(_speedMode)),
-                ),
-                Chip(
-                  avatar: const Icon(Icons.trending_up, size: 18),
-                  label: Text(_displayLabel(_difficulty)),
-                ),
-                Chip(
-                  avatar: const Icon(Icons.timer_outlined, size: 18),
-                  label: Text('${_timeCapSeconds.round()}s cap'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Round complete: $completedScore. Starting again from puzzle 1.')),
     );
   }
 
-  Widget _buildFeedbackCard(BuildContext context) {
-    if (_errorMessage != null) {
-      return Card(
-        color: Colors.red.shade50,
+  Widget _buildLoadingBody(BuildContext context) {
+    final title = _isAnalyzing ? 'Analyzing your games...' : 'Preparing your first puzzle...';
+    final subtitle = _isAnalyzing
+        ? 'Background process: $_analysisStatus'
+        : (_errorMessage ?? 'Checking database for existing puzzle results.');
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
+              if (_isAnalyzing)
+                LinearProgressIndicator(value: _analysisProgress / 100)
+              else
+                const CircularProgressIndicator(),
+              const SizedBox(height: 16),
               Text(
-                _errorMessage!,
-                style: TextStyle(color: Colors.red.shade900),
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              const Text('Use the gear icon to adjust the username or make the search faster.'),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_isLoading || !_hasOpenedFirstPuzzle) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.4),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Preparing your first puzzle and quietly lining up the next ones...',
+              if (_activeJobId != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Job: $_activeJobId ($_analysisProgress%)',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
                 ),
-              ),
+              ],
             ],
           ),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Training is live',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _isBuffering ? 'Lining up your next puzzle in the background.' : 'Your next puzzle will be ready when you are.',
-            ),
-          ],
         ),
       ),
     );
@@ -447,21 +461,22 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
   Widget build(BuildContext context) {
     if (_hasOpenedFirstPuzzle && _puzzles.isNotEmpty) {
       final currentIndex = _currentPuzzleIndex < _puzzles.length ? _currentPuzzleIndex : _puzzles.length - 1;
+      final scoreLabel = '${_roundSolvedIndexes.length}/${_puzzles.length}';
 
       return PuzzleDetailPage(
         key: ValueKey('puzzle-$currentIndex-${_puzzles[currentIndex].fen}'),
         index: currentIndex + 1,
         puzzle: _puzzles[currentIndex],
         initialResult: _puzzleResults[currentIndex],
-        onAttempt: (isCorrect) => _recordAttempt(currentIndex, isCorrect),
+        onAttempt: (isCorrect, attemptedMove) => _recordAttempt(currentIndex, isCorrect, attemptedMove),
         onNextPuzzle: _goToNextPuzzle,
         onOpenSettings: () => _openSettings(context),
-        gamesCount: _gamesCount,
         puzzleCount: _puzzles.length,
-        attemptCount: _puzzleResults.length,
-        correctCount: _puzzleResults.values.where((value) => value).length,
-        stats: _stats,
-        isPreparingNext: _isBuffering,
+        starsCount: _starsCount,
+        facepalmCount: _facepalmCount,
+        sadCount: _sadCount,
+        scoreLabel: scoreLabel,
+        isPreparingNext: _isAnalyzing,
       );
     }
 
@@ -476,31 +491,7 @@ class _ChessCoachPageState extends State<ChessCoachPage> {
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text(
-                  _errorMessage ?? 'Preparing your first puzzle...',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'The training board will appear here automatically.',
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      body: _buildLoadingBody(context),
     );
   }
 }

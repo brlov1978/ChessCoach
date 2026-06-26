@@ -1,79 +1,39 @@
 from app import app
 
 
-def test_generate_puzzles_endpoint_returns_json(monkeypatch):
-    sample_games = [{"url": "https://example.com/game", "pgn": "demo"}]
-    sample_puzzles = [
-        {
-            "title": "Find the best move",
-            "fen": "8/8/8/8/8/8/8/8 w - - 0 1",
-            "best_move_uci": "e2e4",
-            "best_move_san": "e4",
-            "actual_move_san": "e4",
-            "played_best_move": True,
-            "evaluation_cp": 250,
-            "mate_in": None,
-            "source_url": "https://example.com/game",
-            "opening": "Italian Game",
-            "opponent": "Opponent",
-            "player_color": "White",
-            "reason": "This winning move was found in your real game.",
-        }
-    ]
-    captured = {}
-
-    def fake_fetch_recent_games(username, max_games=10):
-        captured["username"] = username
-        captured["max_games"] = max_games
-        return sample_games
-
-    def fake_generate_puzzles(
-        games,
-        username,
-        max_puzzles=5,
-        analysis_depth=12,
-        difficulty_level="medium",
-        time_budget_seconds=20.0,
-        multipv=2,
-        allow_cloud_fallback=False,
-        stockfish_path=None,
-    ):
-        captured["max_puzzles"] = max_puzzles
-        captured["analysis_depth"] = analysis_depth
-        captured["difficulty_level"] = difficulty_level
-        captured["time_budget_seconds"] = time_budget_seconds
-        captured["multipv"] = multipv
-        captured["allow_cloud_fallback"] = allow_cloud_fallback
-        captured["stockfish_path"] = stockfish_path
-        return sample_puzzles, {"games_scanned": 1, "positions_checked": 4, "engine_source": "fake"}
-
-    monkeypatch.setattr("app.fetch_recent_games", fake_fetch_recent_games)
-    monkeypatch.setattr("app.generate_puzzles", fake_generate_puzzles)
-
+def test_on_the_fly_endpoint_is_disabled():
     client = app.test_client()
     response = client.post(
         "/api/puzzles",
-        json={
-            "username": "coachuser",
-            "max_games": 40,
-            "max_puzzles": 5,
-            "analysis_depth": 16,
-            "speed_mode": "fast",
-            "difficulty": "hard",
-            "time_budget_seconds": 30,
-        },
+        json={"username": "coachuser"},
+    )
+
+    assert response.status_code == 410
+    data = response.get_json()
+    assert "On-the-fly generation is disabled" in data["error"]
+
+
+def test_analysis_job_endpoint_accepts_request():
+    client = app.test_client()
+    response = client.post(
+        "/api/analysis/jobs",
+        json={"username": "coachuser"},
+    )
+
+    assert response.status_code in (200, 202)
+    data = response.get_json()
+    assert data["status"] in ("queued", "running")
+    assert data["job_id"]
+
+
+def test_mistake_puzzles_endpoint_returns_json():
+    client = app.test_client()
+    response = client.post(
+        "/api/puzzles/mistakes",
+        json={"username": "coachuser"},
     )
 
     assert response.status_code == 200
     data = response.get_json()
-    assert data["games_count"] == 1
-    assert len(data["puzzles"]) == 1
-    assert data["stats"]["engine_source"] == "fake"
-    assert captured["username"] == "coachuser"
-    assert captured["max_games"] == 20
-    assert captured["analysis_depth"] == 10
-    assert captured["difficulty_level"] == "hard"
-    assert captured["time_budget_seconds"] == 12
-    assert captured["multipv"] == 1
-    assert captured["allow_cloud_fallback"] is False
-    assert captured["stockfish_path"] is None
+    assert data["username"] == "coachuser"
+    assert isinstance(data["puzzles"], list)

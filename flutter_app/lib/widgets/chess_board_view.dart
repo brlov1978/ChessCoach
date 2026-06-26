@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:flutter_app/utils/chess_board_utils.dart';
 
@@ -9,6 +8,7 @@ class ChessBoardView extends StatelessWidget {
     required this.fen,
     required this.onSquareTap,
     required this.onMoveAttempt,
+    this.blackPerspective,
     this.selectedSquare,
     this.highlightSquare,
   });
@@ -16,17 +16,29 @@ class ChessBoardView extends StatelessWidget {
   final String fen;
   final ValueChanged<String> onSquareTap;
   final void Function(String fromSquare, String toSquare) onMoveAttempt;
+  final bool? blackPerspective;
   final String? selectedSquare;
   final String? highlightSquare;
 
-  static const Map<String, String> _pieceAssets = {
-    'k': 'assets/pieces/king.svg',
-    'q': 'assets/pieces/queen.svg',
-    'r': 'assets/pieces/rook.svg',
-    'b': 'assets/pieces/bishop.svg',
-    'n': 'assets/pieces/knight.svg',
-    'p': 'assets/pieces/pawn.svg',
+  static const Map<String, String> _solidPieceGlyphs = {
+    'k': '♚',
+    'q': '♛',
+    'r': '♜',
+    'b': '♝',
+    'n': '♞',
+    'p': '♟',
   };
+
+  static const List<Offset> _outlineOffsets = [
+    Offset(-1.4, 0),
+    Offset(1.4, 0),
+    Offset(0, -1.4),
+    Offset(0, 1.4),
+    Offset(-1.0, -1.0),
+    Offset(1.0, -1.0),
+    Offset(-1.0, 1.0),
+    Offset(1.0, 1.0),
+  ];
 
   Widget _buildPieceWidget(String piece, {double size = 34}) {
     if (piece.isEmpty) {
@@ -45,35 +57,45 @@ class ChessBoardView extends StatelessWidget {
       _ => 0.94,
     };
 
-    final pieceAsset = _pieceAssets[normalizedPiece]!;
-    final frontColor =
-        isWhite ? const Color(0xFFFDFBF6) : const Color(0xFF1F1F1F);
-    final outlineColor =
-        isWhite ? const Color(0xFF3A342E) : const Color(0xFFE8E2D8);
-    final pieceSize = size * sizeFactor;
+    final glyph = _solidPieceGlyphs[normalizedPiece] ?? '';
+    final frontColor = isWhite ? const Color(0xFFF6F6F6) : const Color(0xFF111111);
+    final pieceSize = size * sizeFactor * 1.15;
+    final fontSize = pieceSize * 0.9;
+    final verticalOffset = size * 0.02 + (normalizedPiece == 'p' ? 0 : 5);
 
     return SizedBox(
       width: size,
       height: size,
       child: Center(
         child: Transform.translate(
-          offset: Offset(0, size * 0.04),
+          offset: Offset(0, verticalOffset),
           child: Stack(
+            clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              SvgPicture.asset(
-                pieceAsset,
-                width: pieceSize * 1.08,
-                height: pieceSize * 1.08,
-                fit: BoxFit.contain,
-                colorFilter: ColorFilter.mode(outlineColor, BlendMode.srcIn),
-              ),
-              SvgPicture.asset(
-                pieceAsset,
-                width: pieceSize,
-                height: pieceSize,
-                fit: BoxFit.contain,
-                colorFilter: ColorFilter.mode(frontColor, BlendMode.srcIn),
+              if (isWhite)
+                ..._outlineOffsets.map(
+                  (offset) => Transform.translate(
+                    offset: offset,
+                    child: Text(
+                      glyph,
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        height: 1,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF101010),
+                      ),
+                    ),
+                  ),
+                ),
+              Text(
+                glyph,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  height: 1,
+                  fontWeight: FontWeight.w700,
+                  color: frontColor,
+                ),
               ),
             ],
           ),
@@ -85,6 +107,8 @@ class ChessBoardView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = expandFenBoard(fen);
+    final parts = fen.split(' ');
+    final isBlackToMove = blackPerspective ?? (parts.length > 1 && parts[1] == 'b');
 
     return AspectRatio(
       aspectRatio: 1,
@@ -107,9 +131,11 @@ class ChessBoardView extends StatelessWidget {
             return Expanded(
               child: Row(
                 children: List.generate(8, (column) {
+                  final boardRow = isBlackToMove ? 7 - row : row;
+                  final boardColumn = isBlackToMove ? 7 - column : column;
                   final square =
-                      '${String.fromCharCode(97 + column)}${8 - row}';
-                  final piece = rows[row][column];
+                    '${String.fromCharCode(97 + boardColumn)}${8 - boardRow}';
+                  final piece = rows[boardRow][boardColumn];
                   final isLight = (row + column).isEven;
                   final isSelected = selectedSquare == square;
                   final isHighlighted = highlightSquare == square;
@@ -160,7 +186,7 @@ class ChessBoardView extends StatelessWidget {
                                     left: 4,
                                     top: 2,
                                     child: Text(
-                                      '${8 - row}',
+                                      square.substring(1),
                                       style: TextStyle(
                                         fontSize: 9,
                                         fontWeight: FontWeight.w600,
@@ -175,7 +201,7 @@ class ChessBoardView extends StatelessWidget {
                                     right: 4,
                                     bottom: 2,
                                     child: Text(
-                                      String.fromCharCode(97 + column),
+                                      square[0],
                                       style: TextStyle(
                                         fontSize: 9,
                                         fontWeight: FontWeight.w600,

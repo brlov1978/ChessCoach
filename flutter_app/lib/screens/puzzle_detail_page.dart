@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:flutter_app/models/puzzle_data.dart';
 import 'package:flutter_app/utils/chess_board_utils.dart';
@@ -11,28 +12,28 @@ class PuzzleDetailPage extends StatefulWidget {
     required this.index,
     required this.puzzle,
     required this.onAttempt,
+    this.starsCount = 0,
+    this.facepalmCount = 0,
+    this.sadCount = 0,
+    this.scoreLabel = '0/0',
     this.initialResult,
     this.onNextPuzzle,
     this.onOpenSettings,
-    this.gamesCount = 0,
     this.puzzleCount = 0,
-    this.attemptCount = 0,
-    this.correctCount = 0,
-    this.stats,
     this.isPreparingNext = false,
   });
 
   final int index;
   final PuzzleData puzzle;
-  final ValueChanged<bool> onAttempt;
+  final void Function(bool isCorrect, String attemptedMove) onAttempt;
+  final int starsCount;
+  final int facepalmCount;
+  final int sadCount;
+  final String scoreLabel;
   final bool? initialResult;
   final VoidCallback? onNextPuzzle;
   final VoidCallback? onOpenSettings;
-  final int gamesCount;
   final int puzzleCount;
-  final int attemptCount;
-  final int correctCount;
-  final Map<String, dynamic>? stats;
   final bool isPreparingNext;
 
   @override
@@ -42,6 +43,7 @@ class PuzzleDetailPage extends StatefulWidget {
 class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
   bool _reveal = false;
   late String _currentFen;
+  late bool _blackPerspective;
   String? _selectedSquare;
   String? _highlightSquare;
   bool? _lastResult;
@@ -70,6 +72,8 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
 
   void _resetPuzzle() {
     _currentFen = widget.puzzle.fen;
+    final parts = widget.puzzle.fen.split(' ');
+    _blackPerspective = parts.length > 1 && parts[1] == 'b';
     _selectedSquare = null;
     _highlightSquare = null;
     _reveal = false;
@@ -85,7 +89,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
     final attemptedMove = '$fromSquare$toSquare'.toLowerCase();
     final isCorrect = attemptedMove == expectedMove.substring(0, 4);
 
-    widget.onAttempt(isCorrect);
+    widget.onAttempt(isCorrect, attemptedMove);
 
     setState(() {
       _highlightSquare = toSquare;
@@ -140,8 +144,6 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
   }
 
   Widget _buildHeaderSnapshot(BuildContext context) {
-    final positions = widget.stats?['positions_checked']?.toString() ?? '0';
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
@@ -167,11 +169,41 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _SnapshotPill(label: 'Score', value: '${widget.correctCount}/${widget.attemptCount}'),
+                  _SnapshotPill(
+                    label: 'Puzzles',
+                    value: '${widget.puzzleCount}',
+                    icon: Icons.grid_view_rounded,
+                  ),
                   const SizedBox(width: 8),
-                  _SnapshotPill(label: 'Next', value: widget.isPreparingNext ? 'Loading' : 'Ready'),
+                  _SnapshotPill(
+                    label: 'Stars',
+                    value: '${widget.starsCount}',
+                    icon: Icons.star_rounded,
+                  ),
                   const SizedBox(width: 8),
-                  _SnapshotPill(label: 'Checked', value: positions),
+                  _SnapshotPill(
+                    label: 'Facepalms',
+                    value: '${widget.facepalmCount}',
+                    icon: Icons.sentiment_dissatisfied_rounded,
+                  ),
+                  const SizedBox(width: 8),
+                  _SnapshotPill(
+                    label: 'Sad',
+                    value: '${widget.sadCount}',
+                    icon: Icons.sentiment_very_dissatisfied_rounded,
+                  ),
+                  const SizedBox(width: 8),
+                  _SnapshotPill(
+                    label: 'Score',
+                    value: widget.scoreLabel,
+                    icon: Icons.emoji_events_rounded,
+                  ),
+                  const SizedBox(width: 8),
+                  _SnapshotPill(
+                    label: 'Next',
+                    value: widget.isPreparingNext ? 'Loading' : 'Ready',
+                    icon: widget.isPreparingNext ? Icons.hourglass_bottom_rounded : Icons.check_circle_rounded,
+                  ),
                 ],
               ),
             ),
@@ -312,6 +344,95 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
     );
   }
 
+  Widget _buildRepeatDetailsCard() {
+    final repeats = widget.puzzle.repeatExamples;
+    if (repeats.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final repeatCount = widget.puzzle.repeatCount ?? repeats.length;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF22201D),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF4A4743)),
+      ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        iconColor: const Color(0xFFBFD97B),
+        collapsedIconColor: const Color(0xFFBFD97B),
+        title: Text(
+          'You repeated this mistake $repeatCount times',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: const Text(
+          'Tap to view game occurrences',
+          style: TextStyle(color: Colors.white70),
+        ),
+        children: [
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: repeats.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 2.1,
+            ),
+            itemBuilder: (context, index) {
+              final item = repeats[index];
+              return Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1816),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF3E3A36)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${item.format.toUpperCase()} • ${item.date}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () async {
+                        final uri = Uri.tryParse(item.url);
+                        if (uri != null) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      child: const Text(
+                        'Open game',
+                        style: TextStyle(
+                          color: Color(0xFF8BC0FF),
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final puzzle = widget.puzzle;
@@ -377,6 +498,7 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
                                 height: boardSize,
                                 child: ChessBoardView(
                                   fen: _currentFen,
+                                  blackPerspective: _blackPerspective,
                                   selectedSquare: _selectedSquare,
                                   highlightSquare: _highlightSquare,
                                   onSquareTap: _handleSquareTap,
@@ -406,6 +528,10 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
                       ),
                       const SizedBox(height: 12),
                       Text(puzzle.reason),
+                      if (puzzle.repeatExamples.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        _buildRepeatDetailsCard(),
+                      ],
                       const SizedBox(height: 12),
                       Wrap(
                         spacing: 12,
@@ -445,30 +571,30 @@ class _PuzzleDetailPageState extends State<PuzzleDetailPage> {
 }
 
 class _SnapshotPill extends StatelessWidget {
-  const _SnapshotPill({required this.label, required this.value});
+  const _SnapshotPill({required this.label, required this.value, required this.icon});
 
   final String label;
   final String value;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1D1B),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF4A4743)),
-      ),
-      child: RichText(
-        text: TextSpan(
-          style: Theme.of(context).textTheme.labelMedium,
+    return Tooltip(
+      message: label,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1D1B),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFF4A4743)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            TextSpan(
-              text: '$label ',
-              style: const TextStyle(color: Colors.white70),
-            ),
-            TextSpan(
-              text: value,
+            Icon(icon, size: 18, color: const Color(0xFFBFD97B)),
+            const SizedBox(width: 6),
+            Text(
+              value,
               style: const TextStyle(
                 color: Color(0xFFBFD97B),
                 fontWeight: FontWeight.w800,

@@ -17,27 +17,25 @@ void main() {
     expect(find.text('Create puzzles'), findsNothing);
   });
 
-  testWidgets('Settings page renders speed and difficulty options', (WidgetTester tester) async {
+  testWidgets('Settings page renders analysis options', (WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: SettingsPage(
           initialSettings: TrainingSettings(
             backendUrl: 'http://127.0.0.1:8000',
-            username: 'hikaru',
-            maxGames: 10,
-            maxPuzzles: 5,
+            username: 'brlov1978',
+            monthsBack: 12,
+            maxGames: 500,
             analysisDepth: 10,
-            speedMode: 'balanced',
-            difficulty: 'medium',
-            timeCapSeconds: 20,
+            mistakeThresholdCp: 90,
           ),
         ),
       ),
     );
 
-    expect(find.text('Speed mode'), findsOneWidget);
-    expect(find.text('Difficulty'), findsOneWidget);
-    expect(find.textContaining('Generation time cap'), findsOneWidget);
+    expect(find.textContaining('How far back to scan'), findsOneWidget);
+    expect(find.textContaining('Max games to scan per run'), findsOneWidget);
+    expect(find.textContaining('Mistake threshold'), findsOneWidget);
   });
 
   testWidgets('Puzzle detail screen supports drag solving', (WidgetTester tester) async {
@@ -61,7 +59,7 @@ void main() {
         home: PuzzleDetailPage(
           index: 1,
           puzzle: puzzle,
-          onAttempt: (_) {},
+          onAttempt: (_, __) {},
         ),
       ),
     );
@@ -97,7 +95,7 @@ void main() {
                       builder: (_) => PuzzleDetailPage(
                         index: 1,
                         puzzle: puzzle,
-                        onAttempt: (_) {},
+                        onAttempt: (_, __) {},
                       ),
                     ),
                   );
@@ -138,7 +136,7 @@ void main() {
           index: 1,
           puzzle: puzzle,
           initialResult: true,
-          onAttempt: (_) {},
+          onAttempt: (_, __) {},
         ),
       ),
     );
@@ -169,7 +167,7 @@ void main() {
           index: 1,
           puzzle: puzzle,
           initialResult: false,
-          onAttempt: (_) {},
+          onAttempt: (_, __) {},
         ),
       ),
     );
@@ -198,7 +196,7 @@ void main() {
         home: PuzzleDetailPage(
           index: 1,
           puzzle: puzzle,
-          onAttempt: (_) {},
+          onAttempt: (_, __) {},
         ),
       ),
     );
@@ -251,7 +249,7 @@ void main() {
           index: 1,
           puzzle: puzzleOne,
           initialResult: false,
-          onAttempt: (_) {},
+          onAttempt: (_, __) {},
         ),
       ),
     );
@@ -263,7 +261,7 @@ void main() {
         home: PuzzleDetailPage(
           index: 2,
           puzzle: puzzleTwo,
-          onAttempt: (_) {},
+          onAttempt: (_, __) {},
         ),
       ),
     );
@@ -294,7 +292,7 @@ void main() {
         home: PuzzleDetailPage(
           index: 1,
           puzzle: puzzle,
-          onAttempt: (_) {},
+          onAttempt: (_, __) {},
         ),
       ),
     );

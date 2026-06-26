@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -42,6 +43,43 @@ def fetch_recent_games(username: str, max_games: int = 25) -> list[dict[str, Any
         archive_data = _get_json(archive_url)
         monthly_games = archive_data.get("games", [])
         games.extend(monthly_games)
+        if len(games) >= max_games:
+            break
+
+    public_games = [game for game in games if game.get("pgn")]
+    public_games.sort(key=lambda item: item.get("end_time", 0), reverse=True)
+    return public_games[:max_games]
+
+
+def fetch_games_since(
+    username: str,
+    since: datetime | None,
+    max_games: int = 500,
+) -> list[dict[str, Any]]:
+    username = username.strip().lower()
+    if not username:
+        raise ChessComAPIError("Please enter a Chess.com username.")
+
+    since_ts = int(since.replace(tzinfo=timezone.utc).timestamp()) if since else 0
+    archives_url = f"{BASE_URL}/{username}/games/archives"
+    archives_data = _get_json(archives_url)
+    archives = list(reversed(archives_data.get("archives", [])))
+
+    if not archives:
+        return []
+
+    games: list[dict[str, Any]] = []
+    for archive_url in archives:
+        archive_data = _get_json(archive_url)
+        monthly_games = archive_data.get("games", [])
+
+        if since_ts:
+            monthly_games = [
+                game for game in monthly_games if int(game.get("end_time", 0) or 0) >= since_ts
+            ]
+
+        games.extend(monthly_games)
+
         if len(games) >= max_games:
             break
 
